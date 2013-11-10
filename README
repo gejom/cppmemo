@@ -1,0 +1,9 @@
+C++Memo v0.9 beta
+(c)2013 Giacomo Drago
+
+C++Memo is a generic framework for memoization written in the C++ programming
+language.
+It aims to be a tool for rapid prototyping of software components implementing
+dynamic programming algorithms or, anyhow, requiring memoization.
+
+See project website: http://projects.giacomodrago.com/c++memo
