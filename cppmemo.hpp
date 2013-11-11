@@ -153,33 +153,29 @@ private:
 
 #ifdef CPPMEMO_DETECT_CIRCULAR_DEPENDENCIES
         std::unordered_set<Key, KeyHash1, KeyEqual> stackItems;
-        const auto push = [&](const Key& key) -> bool {
+#endif
+        
+        const auto push = [&](const Key& key) {
+#ifdef CPPMEMO_DETECT_CIRCULAR_DEPENDENCIES
             if (stackItems.find(key) != stackItems.end()) {
                 throw std::logic_error("Circular dependency detected.");
             }
+#endif
             stack.push_back({ key, false });
-            return true;
         };
         const auto pop = [&] {
+#ifdef CPPMEMO_DETECT_CIRCULAR_DEPENDENCIES            
             const StackItem& item = stack.back();
             stackItems.erase(item.key);
-            stack.pop_back();
-        };
-#else
-        const auto push = [&](const Key& key) -> bool {
-            if (values.find(key) == values.end()) {
-                stack.push_back({ key, false });
-                return true;
-            }
-            return false;
-        };
-        const auto pop = [&] {
-            stack.pop_back();
-        };
 #endif
+            stack.pop_back();
+        };
 
         push(key);
-
+#ifdef CPPMEMO_DETECT_CIRCULAR_DEPENDENCIES
+        stackItems.insert(key);
+#endif
+        
         while (!stack.empty()) {
 
             StackItem& item = stack.back();
@@ -194,12 +190,12 @@ private:
 
             if (itemReady) {
 
-                const auto prereqs = [&](const Key& key) -> const Value& {
+                const auto prerequisites = [&](const Key& key) -> const Value& {
                     return values[key];
                 };
 
                 values.insert(itemKey, [&](const Key& key) -> Value {
-                    return compute(key, prereqs);
+                    return compute(key, prerequisites);
                 });
 
             } else if (values.find(itemKey) == values.end()) {
@@ -210,16 +206,30 @@ private:
                                                        // to get prerequisites
 
                     declarePrerequisites(itemKey, [&](const Key& prerequisite) {
-                        if (push(prerequisite)) noPrerequisites++;
+                        if (values.find(prerequisite) == values.end()) {
+                            push(prerequisite);
+                            noPrerequisites++;
+                        }
                     });
 
                 } else { // dry-run the compute function to capture prerequisites
-
+                    
                     const Value dummy = Value();
-                    compute(itemKey, [&](const Key& prerequisite) -> const Value& {
-                        if (push(prerequisite)) noPrerequisites++;
-                        return dummy;
+                    const Value itemValue = compute(itemKey, [&](const Key& prerequisite) -> const Value& {
+                        const auto findIt = values.find(prerequisite);
+                        if (findIt == values.end()) {
+                            push(prerequisite);
+                            noPrerequisites++;
+                            return dummy; // return an invalid value
+                        } else {
+                            return findIt->second; // return a valid value
+                        }
                     });
+                    
+                    if (noPrerequisites == 0) { // the computed value is valid
+                        values.emplace(itemKey, itemValue);
+                        pop();
+                    }
 
                 }
 
@@ -230,8 +240,8 @@ private:
 
 #ifdef CPPMEMO_DETECT_CIRCULAR_DEPENDENCIES
                 for (int i = 1; i <= noPrerequisites; i++) {
-                    const StackItem& item = *(stack.end() - i);
-                    stackItems.insert(item.key);
+                    const StackItem& addedItem = *(stack.end() - i);
+                    stackItems.insert(addedItem.key);
                 }
 #endif
 
@@ -263,13 +273,13 @@ public:
                    DeclarePrerequisites declarePrerequisites,
                    int numThreads) {
 
-        const auto it = values.find(key);
-        if (it != values.end()) {
-            return it->second;
+        const auto findIt = values.find(key);
+        if (findIt != values.end()) {
+            return findIt->second;
         }
 
         if (compute == nullptr) {
-            throw std::logic_error("The compute function must be specified when the value is not yet computed");
+            throw std::logic_error("The compute function must be specified when the value is not memoized");
         }
 
         if (numThreads > 1) { // multi-thread execution
