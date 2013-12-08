@@ -51,6 +51,7 @@
 #include <vector>
 #include <memory>
 #include <functional>
+#include <type_traits>
 #include <stdexcept>
 #include <atomic>
 #include <thread>
