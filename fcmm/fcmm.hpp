@@ -1,7 +1,7 @@
 /**
  * @file
  * @author  Giacomo Drago <giacomo@giacomodrago.com>
- * @version 0.9 beta
+ * @version 1.0 RC
  *
  *
  * @section LICENSE
@@ -18,7 +18,7 @@
  *    documentation and/or other materials provided with the distribution.
  * 3. All advertising materials mentioning features or use of this software
  *    must display the following acknowledgement:
- *      This product includes Fcmm, a software developed by Giacomo Drago.
+ *      This product includes fcmm, a software developed by Giacomo Drago.
  *      Website: http://projects.giacomodrago.com/fcmm
  * 4. Neither the name of Giacomo Drago nor the
  *    names of its contributors may be used to endorse or promote products
@@ -55,39 +55,41 @@
 #include <atomic>
 #include <thread>
 
+namespace fcmm {
+
 /**
  * @brief Default maximum load factor
  */
-static const float FCMM_DEFAULT_MAX_LOAD_FACTOR = 0.75f;
+static const float DEFAULT_MAX_LOAD_FACTOR = 0.75f;
 
 /**
  * @brief Default maximum number of submaps
  */
-static const std::size_t FCMM_DEFAULT_MAX_NUM_SUBMAPS = 128;
+static const std::size_t DEFAULT_MAX_NUM_SUBMAPS = 128;
 
 /**
  * @brief The capacity of a new submap is calculated as the first prime number following the capacity of the
  * last submap multiplied by this constant
  */
-static const std::size_t FCMM_NEW_SUBMAPS_CAPACITY_MULTIPLIER = 8;
+static const std::size_t NEW_SUBMAPS_CAPACITY_MULTIPLIER = 8;
 
 /**
  * @brief Minimum capacity of the first submap
  */
-static const std::size_t FCMM_FIRST_SUBMAP_MIN_CAPACITY = 65537;
+static const std::size_t FIRST_SUBMAP_MIN_CAPACITY = 65537;
 
 /**
  * @brief The capacity of the first submap is calculated as:
- * <code>max(FCMM_FIRST_SUBMAP_MIN_CAPACITY, fcmmNextPrime(<b>FCMM_FIRST_SUBMAP_CAPACITY_MULTIPLIER</b> * estimatedNumEntries / maxLoadFactor))</code>
+ * <code>max(FIRST_SUBMAP_MIN_CAPACITY, nextPrime(<b>FIRST_SUBMAP_CAPACITY_MULTIPLIER</b> * estimatedNumEntries / maxLoadFactor))</code>
  */
-static const float FCMM_FIRST_SUBMAP_CAPACITY_MULTIPLIER = 1.03f;
+static const float FIRST_SUBMAP_CAPACITY_MULTIPLIER = 1.03f;
 
 /**
- * @brief Auxiliary function for fcmmNextPrime(). Returns `true` if `n` is prime, `false` otherwise.
+ * @brief Auxiliary function for nextPrime(). Returns `true` if `n` is prime, `false` otherwise.
  *
  * Adapted from http://stackoverflow.com/a/5694432/671092
  */
-static bool fcmmIsPrime(std::size_t n) noexcept {
+static bool isPrime(std::size_t n) noexcept {
 
     std::size_t divisor = 3;
     while (1) {
@@ -108,7 +110,7 @@ static bool fcmmIsPrime(std::size_t n) noexcept {
  *
  * Adapted from http://stackoverflow.com/a/5694432/671092
  */
-static std::size_t fcmmNextPrime(std::size_t n) noexcept {
+static std::size_t nextPrime(std::size_t n) noexcept {
 
     if (n <= 2)
         return 2;
@@ -116,7 +118,7 @@ static std::size_t fcmmNextPrime(std::size_t n) noexcept {
     if (n % 2 == 0)
         n++;
 
-    while (!fcmmIsPrime(n)) {
+    while (!isPrime(n)) {
         n += 2;
     }
 
@@ -127,9 +129,9 @@ static std::size_t fcmmNextPrime(std::size_t n) noexcept {
 /**
  * @brief This struct holds the statistics about a single submap of a @link Fcmm @endlink instance
  *
- * @see FcmmStats
+ * @see Stats
  */
-struct FcmmSubmapStats {
+struct SubmapStats {
 
     /**
      * @brief Capacity of the submap
@@ -153,7 +155,7 @@ struct FcmmSubmapStats {
  *
  * @see Fcmm::getStats()
  */
-struct FcmmStats {
+struct Stats {
 
     /**
      * @brief Number of submaps in the map
@@ -167,28 +169,23 @@ struct FcmmStats {
 
     /**
      * @brief Statistics about each submap of the map
-     * @see FcmmSubmapStats
+     * @see SubmapStats
      */
-    std::vector<FcmmSubmapStats> submapsStats;
+    std::vector<SubmapStats> submapsStats;
 
 };
 
 /**
- * @brief This dummy hash function (returning always 0) is the default for the `KeyHash2` template
- * parameter of @link Fcmm @endlink.
- *
- * It is <b>strongly</b> recommended not to rely on this default (which basically is a fallback
- * to single hashing with linear probing) and provide an actual second hash function, completely independent
- * from the first one.
+ * @brief This hash function is the default for the `KeyHash2` template parameter of @link Fcmm @endlink.
+ * It is only available for <a href="http://en.cppreference.com/w/cpp/types/is_integral">integral types</a>.
  */
-template<typename Key>
-class FcmmDummyHashFunction {
+template<typename Key, typename Enable = typename std::enable_if<std::is_integral<Key>::value, Key>::type>
+class SecondHashFunction {
+private:
+    std::hash<Key> hash;
 public:
-    /**
-     * @brief Returns 0.
-     */
-    constexpr std::size_t operator()(const Key& /* ignored */) const {
-        return 0;
+    std::size_t operator()(const Key& key) const {
+        return hash(~key);
     }
 };
 
@@ -220,7 +217,7 @@ template<
     typename Key,
     typename Value,
     typename KeyHash1 = std::hash<Key>,
-    typename KeyHash2 = FcmmDummyHashFunction<Key>,
+    typename KeyHash2 = SecondHashFunction<Key>,
     typename KeyEqual = std::equal_to<Key>
 >
 class Fcmm {
@@ -539,11 +536,11 @@ private:
         /**
          * @brief Returns statistics about this Fcmm::Submap instance.
          *
-         * @see FcmmSubmapStats
+         * @see SubmapStats
          */
-        FcmmSubmapStats getStats() const {
+        SubmapStats getStats() const {
 
-            FcmmSubmapStats stats;
+            SubmapStats stats;
 
             stats.capacity = getCapacity();
             stats.numValidBuckets = getNumValidBuckets();
@@ -660,7 +657,7 @@ private:
 
         if (lastSubmap.isOverloaded()) { // re-check if the submap is overloaded
             // perform expansion
-            const std::size_t newSubmapCapacity = fcmmNextPrime(lastSubmap.getCapacity() * FCMM_NEW_SUBMAPS_CAPACITY_MULTIPLIER);
+            const std::size_t newSubmapCapacity = nextPrime(lastSubmap.getCapacity() * NEW_SUBMAPS_CAPACITY_MULTIPLIER);
             getSubmap(lastSubmapIndex + 1).reset(new Submap(newSubmapCapacity, maxLoadFactor));
             incrementNumSubmaps();
             result = true;
@@ -760,8 +757,8 @@ public:
      *                             if this limit is exceeded, a std::runtime_error is thrown
      */
     Fcmm(std::size_t estimatedNumEntries = 0,
-         float maxLoadFactor = FCMM_DEFAULT_MAX_LOAD_FACTOR,
-         std::size_t maxNumSubmaps = FCMM_DEFAULT_MAX_NUM_SUBMAPS) :
+         float maxLoadFactor = DEFAULT_MAX_LOAD_FACTOR,
+         std::size_t maxNumSubmaps = DEFAULT_MAX_NUM_SUBMAPS) :
             maxLoadFactor(maxLoadFactor),
             numSubmaps(1),
             submaps(maxNumSubmaps),
@@ -778,8 +775,8 @@ public:
 
         // calculate the capacity of the first submap
         const std::size_t firstSubmapCapacity = std::max(
-                    FCMM_FIRST_SUBMAP_MIN_CAPACITY,
-                    fcmmNextPrime(FCMM_FIRST_SUBMAP_CAPACITY_MULTIPLIER * estimatedNumEntries / maxLoadFactor));
+                    FIRST_SUBMAP_MIN_CAPACITY,
+                    nextPrime(FIRST_SUBMAP_CAPACITY_MULTIPLIER * estimatedNumEntries / maxLoadFactor));
 
         // create the first submap
         getSubmap(0).reset(new Submap(firstSubmapCapacity, maxLoadFactor));
@@ -962,11 +959,11 @@ public:
      *
      * The information returned by this method is useful for debugging and benchmarking.
      *
-     * @see FcmmStats
+     * @see Stats
      */
-    FcmmStats getStats() const {
+    Stats getStats() const {
 
-        FcmmStats stats;
+        Stats stats;
 
         stats.numEntries = getNumEntries();
         stats.numSubmaps = getNumSubmaps();
@@ -1151,5 +1148,7 @@ public:
     Fcmm(Fcmm&&) = delete;
 
 };
+
+} // namespace fcmm
 
 #endif // FCMM_H_

@@ -21,6 +21,25 @@ static const std::vector<int> VALUES = {0, // 0-th element is never used
 struct Key {
     int items;
     int weight;
+    bool operator==(const Key& other) const {
+        return other.items == items && other.weight == weight;
+    }
+};
+
+struct KeyHash1 {
+    std::size_t operator()(const Key& key) const {
+        // FNV hash
+        std::size_t hash = 2166136261;
+        hash = (hash * 16777619) ^ key.items;
+        hash = (hash * 16777619) ^ key.weight;
+        return hash;
+    }
+};
+
+struct KeyHash2 {
+    std::size_t operator()(const Key& key) const {
+        return key.items ^ key.weight;
+    }
 };
 
 int knapsack(const Key& key, std::function<int(Key)> prereqs) {
@@ -47,7 +66,7 @@ int main(int argc, char** argv) {
     
     const bool printAsRow = getenv("CPPMEMO_PRINT_AS_ROW") != nullptr;
 
-    cppmemo::CppMemo<Key, int> cppMemo(numThreads, numItems * knapsackCapacity);
+    cppmemo::CppMemo<Key, int, KeyHash1, KeyHash2> cppMemo(numThreads, numItems * knapsackCapacity);
     int maxValue;
 
     const Timestamp start = now();

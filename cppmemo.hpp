@@ -60,6 +60,7 @@
 #include <thread> // std::thread
 #include <functional> // std::function
 #include <algorithm> // std::shuffle
+#include <type_traits> // std::enable_if, std::is_integral
 
 #ifdef CPPMEMO_DETECT_CIRCULAR_DEPENDENCIES
 #include <unordered_set>
@@ -70,61 +71,16 @@
 
 namespace cppmemo {
 
-template<typename Key>
-struct GenericHash1 {
-    std::size_t operator()(const Key& key) const {
-        const std::size_t prime = 2147483647;
-        std::size_t hash = 2166136261;
-        const char* bytes = (const char*) &key;
-        for (std::size_t i = 0; i < sizeof(Key); i++) {
-            hash = (hash * prime) ^ bytes[i];
-        }
-        return hash;
-    }
-};
-
-template<typename Key>
-struct GenericHash2 {
-    std::size_t operator()(const Key& key) const {
-        std::size_t hash = 0;
-        const char* bytes = (const char*) &key;
-        for (std::size_t i = 0; i < sizeof(Key); i++) {
-            hash = bytes[i] + (hash << 6) + (hash << 16) - hash;
-        }
-        return hash;
-    }
-};
-
-template<typename Key>
-struct GenericEqual {
-    bool operator()(const Key& key1, const Key& key2) const {
-        const char* bytes1 = (const char*) &key1;
-        const char* bytes2 = (const char*) &key2;
-        for (std::size_t i = 0; i < sizeof(Key); i++) {
-            if (bytes1[i] != bytes2[i]) return false;
-        }
-        return true;
-    }
-};
-
 /**
  * This class implements a generic framework for memoization supporting
- * parallel execution.
- *
- * IMPORTANT WARNING: default template parameters are NOT always appropriate.
- * Improper use of the defaults for KeyHash1, KeyHash2 and KeyEqual will cause
- * unpredictable results.
- *
- * Before using this class, please read the complete documentation
- * (including important caveats) on the project website:
- * http://projects.giacomodrago.com/c++memo
+ * automatic parallel execution.
  */
 template<
     typename Key,
     typename Value,
-    typename KeyHash1 = GenericHash1<Key>,
-    typename KeyHash2 = GenericHash2<Key>,
-    typename KeyEqual = GenericEqual<Key>
+    typename KeyHash1 = std::hash<Key>,
+    typename KeyHash2 = fcmm::SecondHashFunction<Key>,
+    typename KeyEqual = std::equal_to<Key>
 >
 class CppMemo {
 
@@ -136,7 +92,7 @@ public:
 private:
 
     int defaultNumThreads;
-    Fcmm<Key, Value, KeyHash1, KeyHash2, KeyEqual> values;
+    fcmm::Fcmm<Key, Value, KeyHash1, KeyHash2, KeyEqual> values;
 
     void runThread(int threadNo,
                    const Key& key,

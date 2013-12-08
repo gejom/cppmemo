@@ -4,9 +4,34 @@
 #include <iostream>
 #include <iomanip> // std::setw
 
-struct Range { int from, to; };
+struct Range { 
+    int from;
+    int to;
+    bool operator==(const Range& other) const {
+        return other.from == from && other.to == to;
+    }
+};
 
-struct Matrix { int p, q; };
+struct RangeHash1 {
+    std::size_t operator()(const Range& range) const {
+        // FNV hash
+        std::size_t hash = 2166136261;
+        hash = (hash * 16777619) ^ range.from;
+        hash = (hash * 16777619) ^ range.to;
+        return hash;
+    }
+};
+
+struct RangeHash2 {
+    std::size_t operator()(const Range& range) const {
+        return range.from ^ range.to;
+    }
+};
+
+struct Matrix {
+    int p;
+    int q;
+};
 
 struct Result {
     int lowestCost;
@@ -106,7 +131,7 @@ int main(int argc, char** argv) {
 
     std::cout << std::endl;
 
-    cppmemo::CppMemo<Range, Result> cppMemo(numThreads, numMatrices * numMatrices);
+    cppmemo::CppMemo<Range, Result, RangeHash1, RangeHash2> cppMemo(numThreads, numMatrices * numMatrices);
 
     const Range fullRange { 0, (int) matrices.size() - 1 };
     Result result;
