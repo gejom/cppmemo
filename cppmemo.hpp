@@ -60,7 +60,6 @@
 #include <thread> // std::thread
 #include <functional> // std::function
 #include <algorithm> // std::shuffle
-#include <type_traits> // std::enable_if, std::is_integral
 
 #ifdef CPPMEMO_DETECT_CIRCULAR_DEPENDENCIES
 #include <unordered_set>
