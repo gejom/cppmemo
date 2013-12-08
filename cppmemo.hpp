@@ -60,6 +60,7 @@
 #include <thread> // std::thread
 #include <functional> // std::function
 #include <algorithm> // std::shuffle
+#include <cstddef> // std::nullptr_t
 
 #ifdef CPPMEMO_DETECT_CIRCULAR_DEPENDENCIES
 #include <unordered_set>
@@ -82,21 +83,19 @@ template<
     typename KeyEqual = std::equal_to<Key>
 >
 class CppMemo {
-
-public:
-
-    typedef std::function<void(const Key&, std::function<void(const Key&)>)> DeclarePrerequisites;
-    typedef std::function<Value(const Key&, std::function<const Value&(const Key&)>)> Compute;
-
+    
 private:
-
+    
     int defaultNumThreads;
     fcmm::Fcmm<Key, Value, KeyHash1, KeyHash2, KeyEqual> values;
-
-    void runThread(int threadNo,
-                   const Key& key,
-                   Compute compute,
-                   DeclarePrerequisites declarePrerequisites) {
+    
+    static void unspecifiedDeclarePrerequisites(
+            const Key& /* unused */,
+            std::function<void(const Key&)> /* unused */) {
+    }
+    
+    template<typename Compute, typename DeclarePrerequisites>
+    void run(int threadNo, const Key& key, Compute compute, DeclarePrerequisites declarePrerequisites) {
 
         struct StackItem {
             Key key;
@@ -157,8 +156,9 @@ private:
 
                 int noPrerequisites = 0;
 
-                if (declarePrerequisites != nullptr) { // execute the declarePrerequisites function
-                                                       // to get prerequisites
+                if (declarePrerequisites != reinterpret_cast<DeclarePrerequisites>(unspecifiedDeclarePrerequisites)) {
+                    
+                    // execute the declarePrerequisites function to get prerequisites
 
                     declarePrerequisites(itemKey, [&](const Key& prerequisite) {
                         if (values.find(prerequisite) == values.end()) {
@@ -167,7 +167,9 @@ private:
                         }
                     });
 
-                } else { // dry-run the compute function to capture prerequisites
+                } else {
+                    
+                    // dry-run the compute function to capture prerequisites
                     
                     const Value dummy = Value();
                     const Value itemValue = compute(itemKey, [&](const Key& prerequisite) -> const Value& {
@@ -223,18 +225,12 @@ public:
         this->defaultNumThreads = defaultNumThreads;
     }
 
-    Value getValue(const Key& key,
-                   Compute compute,
-                   DeclarePrerequisites declarePrerequisites,
-                   int numThreads) {
+    template<typename Compute, typename DeclarePrerequisites>
+    Value getValue(const Key& key, Compute compute, DeclarePrerequisites declarePrerequisites, int numThreads) {
 
         const auto findIt = values.find(key);
         if (findIt != values.end()) {
             return findIt->second;
-        }
-
-        if (compute == nullptr) {
-            throw std::logic_error("The compute function must be specified when the value is not memoized");
         }
 
         if (numThreads > 1) { // multi-thread execution
@@ -244,7 +240,8 @@ public:
 
             for (int threadNo = 0; threadNo < numThreads; threadNo++) {
 
-                std::thread thread(&CppMemo<Key, Value, KeyHash1, KeyHash2, KeyEqual>::runThread,
+                typedef CppMemo<Key, Value, KeyHash1, KeyHash2, KeyEqual> self;
+                std::thread thread(&self::run<Compute, DeclarePrerequisites>,
                                    this, threadNo, std::ref(key), compute, declarePrerequisites);
 
                 threads.push_back(std::move(thread));
@@ -257,7 +254,7 @@ public:
 
         } else { // single thread execution
 
-            runThread(0, key, compute, declarePrerequisites);
+            run(0, key, compute, declarePrerequisites);
 
         }
 
@@ -265,23 +262,30 @@ public:
 
     }
 
-    Value getValue(const Key& key,
-                   Compute compute = nullptr,
-                   DeclarePrerequisites declarePrerequisites = nullptr) {
+    template<typename Compute, typename DeclarePrerequisites>
+    Value getValue(const Key& key, Compute compute, DeclarePrerequisites declarePrerequisites) {
         return getValue(key, compute, declarePrerequisites, getDefaultNumThreads());
     }
-
-    Value operator()(const Key& key,
-                     Compute compute,
-                     DeclarePrerequisites declarePrerequisites,
-                     int numThreads) {
-        return getValue(key, compute, declarePrerequisites, numThreads);
+    
+    template<typename Compute>
+    Value getValue(const Key& key, Compute compute) {
+        return getValue(key, compute, unspecifiedDeclarePrerequisites, getDefaultNumThreads());
     }
 
-    Value operator()(const Key& key,
-                     Compute compute = nullptr,
-                     DeclarePrerequisites declarePrerequisites = nullptr) {
-        return getValue(key, compute, declarePrerequisites);
+    Value getValue(const Key& key) {
+
+        const auto findIt = values.find(key);
+
+        if (findIt != values.end()) {
+            return findIt->second;
+        } else {
+            throw std::logic_error("The compute function must be provided when the value is not memoized");
+        }
+
+    }
+
+    Value operator()(const Key& key) {
+        return getValue(key);
     }
 
     // the class shall not be copied or moved (because of Fcmm)
