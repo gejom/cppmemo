@@ -226,22 +226,9 @@ class Fcmm {
 public:
 
     /**
-     * @brief The type of function or lambda expression that is passed to
-     * insert(const Key&, ComputeValueFunction) for performing just-in-time computation of the value
-     * corresponding to a certain key.
-     */
-    typedef std::function<Value(const Key&)> ComputeValueFunction;
-
-    /**
      * @brief An entry of the map
      */
     typedef std::pair<Key, Value> Entry;
-
-    /**
-     * @brief The type of function or lambda expression that is passed to
-     * filter() to determine which entries should be copied into the new map.
-     */
-    typedef std::function<bool(const Entry&)> FilterFunction;
 
     // Forward declaration
     class const_iterator;
@@ -462,6 +449,7 @@ private:
          * @throw FullSubmapException  thrown if the new entry could not be inserted because the submap is full
          *
          */
+        template<typename ComputeValueFunction>
         std::pair<std::size_t, bool> insert(const Key& key, std::size_t hash1, std::size_t hash2, ComputeValueFunction computeValue) {
 
             Value value = Value(); // to avoid "maybe-uninitialized" warnings
@@ -709,6 +697,7 @@ private:
      * @return              a pair consisting of a @link const_iterator @endlink to the inserted entry (or to the entry
      *                      that prevented the insertion) and a `bool` denoting whether the insertion took place
      */
+    template<typename ComputeValueFunction>
     std::pair<const_iterator, bool> insertHelper(const Key& key, std::size_t hash1, std::size_t hash2, ComputeValueFunction computeValue) {
 
         while (1) {
@@ -833,6 +822,7 @@ public:
      * @return              a pair consisting of a @link const_iterator @endlink to the inserted entry (or to the entry
      *                      that prevented the insertion) and a `bool` denoting whether the insertion took place
      */
+    template<typename ComputeValueFunction>
     std::pair<const_iterator, bool> insert(const Key& key, ComputeValueFunction computeValue) {
         return insertHelper(key, keyHash1(key), keyHash2(key), computeValue);
     }
@@ -848,8 +838,7 @@ public:
      * @see insert(const Key&, ComputeValueFunction)
      */
     std::pair<const_iterator, bool> insert(const Entry& entry) {
-        ComputeValueFunction computeValue = [&entry](const Key&) { return entry.second; };
-        return insert(entry.first, computeValue);
+        return insert(entry.first, [&entry](const Key&) { return entry.second; });
     }
 
     /**
@@ -928,6 +917,7 @@ public:
      *
      * @return                the filtered map
      */
+    template<typename FilterFunction>
     Fcmm* filter(FilterFunction filterFunction) const {
 
         Fcmm* map = new Fcmm(getNumEntries());
@@ -950,9 +940,9 @@ public:
      *
      * The new map is created via `new` and it is responsibility of the caller to `delete` it.
      */
+    
     Fcmm* clone() const {
-        FilterFunction dummyFilterFunction = [](const Entry&) { return true; };
-        return filter(dummyFilterFunction);
+        return filter([](const Entry&) { return true; });
     }
 
     /**
