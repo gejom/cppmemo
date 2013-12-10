@@ -56,6 +56,7 @@
 #define CPPMEMO_H_
 
 #include <vector> // std::vector
+#include <unordered_set> // std::unordered_set
 #include <random> // std::minstd_rand
 #include <thread> // std::thread
 #include <functional> // std::function
@@ -63,13 +64,34 @@
 #include <cstddef> // std::nullptr_t
 #include <stdexcept> // std::logic_error, std::runtime_error
 
-#ifdef CPPMEMO_DETECT_CIRCULAR_DEPENDENCIES
-#include <unordered_set>
-#endif
-
 #include <fcmm/fcmm.hpp>
 
 namespace cppmemo {
+
+template<typename Key>
+class CircularDependencyException : public std::exception {
+    
+    template<typename K, typename V, typename KH1, typename KH2, typename KE>
+    friend class CppMemo;
+    
+private:
+    
+    Key m_key;
+    
+    CircularDependencyException(const Key& key) : m_key(key) {
+    }
+    
+public:
+    
+    const char* what() const noexcept {
+        return "Circular dependency detected.";
+    }
+    
+    const Key& key() const {
+        return m_key;
+    }
+    
+};
 
 /**
  * This class implements a generic framework for memoization supporting
@@ -91,11 +113,7 @@ private:
     
     int defaultNumThreads;
     fcmm::Fcmm<Key, Value, KeyHash1, KeyHash2, KeyEqual> values;
-    
-    static void unspecifiedDeclarePrerequisites(
-            const Key& /* unused */,
-            std::function<void(const Key&)> /* unused */) {
-    }
+    bool detectCircularDependencies;
     
     class ThreadItemsStack {
         
@@ -108,25 +126,26 @@ private:
         
     private:
         
-#ifdef CPPMEMO_DETECT_CIRCULAR_DEPENDENCIES
         std::unordered_set<Key, KeyHash1, KeyEqual> itemsSet;
-#endif
         std::vector<Item> items;        
         int threadNo;
         std::minstd_rand randGen;
         std::size_t groupSize;
+        bool detectCircularDependencies;
         
     public:
         
-        ThreadItemsStack(int threadNo) : threadNo(threadNo), randGen(threadNo), groupSize(0) {
+        ThreadItemsStack(int threadNo, bool detectCircularDependencies) :
+                threadNo(threadNo), randGen(threadNo), groupSize(0),
+                detectCircularDependencies(detectCircularDependencies) {
         }
         
         void push(const Key& key) {
-#ifdef CPPMEMO_DETECT_CIRCULAR_DEPENDENCIES
-            if (itemsSet.find(key) != itemsSet.end()) {
-                throw std::runtime_error("Circular dependency detected.");
+            if (detectCircularDependencies) {
+                if (itemsSet.find(key) != itemsSet.end()) {
+                    throw CircularDependencyException<Key>(key);
+                }
             }
-#endif
             items.push_back({ key, false });
             groupSize++;
         }
@@ -135,10 +154,10 @@ private:
             if (groupSize != 0) {
                 throw std::runtime_error("The current group is not finalized.");
             }
-#ifdef CPPMEMO_DETECT_CIRCULAR_DEPENDENCIES
-            const Item& item = items.back();
-            itemsSet.erase(item.key);
-#endif
+            if (detectCircularDependencies) {
+                const Item& item = items.back();
+                itemsSet.erase(item.key);
+            }
             items.pop_back();
         }
 
@@ -147,12 +166,12 @@ private:
                 // shuffle the added prerequisites for improving parallel speedup
                 std::shuffle(items.end() - groupSize, items.end(), randGen);
             }
-#ifdef CPPMEMO_DETECT_CIRCULAR_DEPENDENCIES
-            for (int i = 1; i <= groupSize; i++) {
-                const Item& addedItem = *(items.end() - i);
-                itemsSet.insert(addedItem.key);
+            if (detectCircularDependencies) {
+                for (int i = 1; i <= groupSize; i++) {
+                    const Item& addedItem = *(items.end() - i);
+                    itemsSet.insert(addedItem.key);
+                }
             }
-#endif
             groupSize = 0;
         }
         
@@ -175,9 +194,10 @@ private:
     };
 
     template<typename Compute, typename DeclarePrerequisites>
-    void run(int threadNo, const Key& key, Compute compute, DeclarePrerequisites declarePrerequisites) {
+    void run(int threadNo, const Key& key, Compute compute, DeclarePrerequisites declarePrerequisites,
+             bool providedDeclarePrerequisites) {
 
-        ThreadItemsStack stack(threadNo);
+        ThreadItemsStack stack(threadNo, detectCircularDependencies);
 
         stack.push(key);
         stack.finalizeGroup();
@@ -206,7 +226,7 @@ private:
 
                 if (values.find(itemKey) == values.end()) {
 
-                    if (declarePrerequisites != reinterpret_cast<DeclarePrerequisites>(unspecifiedDeclarePrerequisites)) {
+                    if (providedDeclarePrerequisites) {
 
                         // execute the declarePrerequisites function to get prerequisites
 
@@ -248,25 +268,9 @@ private:
 
     }
 
-public:
-
-    CppMemo(int defaultNumThreads = 1, std::size_t estimatedNumEntries = 0) : values(estimatedNumEntries) {
-        setDefaultNumThreads(defaultNumThreads);
-    }
-
-    int getDefaultNumThreads() const {
-        return defaultNumThreads;
-    }
-
-    void setDefaultNumThreads(int defaultNumThreads) {
-        if (defaultNumThreads < 1) {
-            throw std::logic_error("The default number of threads must be >= 1");
-        }
-        this->defaultNumThreads = defaultNumThreads;
-    }
-
     template<typename Compute, typename DeclarePrerequisites>
-    const Value& getValue(const Key& key, Compute compute, DeclarePrerequisites declarePrerequisites, int numThreads) {
+    const Value& getValue(const Key& key, Compute compute, DeclarePrerequisites declarePrerequisites, int numThreads,
+                          bool providedDeclarePrerequisites) {
 
         const auto findIt = values.find(key);
         if (findIt != values.end()) {
@@ -282,7 +286,7 @@ public:
 
                 typedef CppMemo<Key, Value, KeyHash1, KeyHash2, KeyEqual> self;
                 std::thread thread(&self::run<Compute, DeclarePrerequisites>,
-                                   this, threadNo, std::ref(key), compute, declarePrerequisites);
+                        this, threadNo, std::ref(key), compute, declarePrerequisites, providedDeclarePrerequisites);
 
                 threads.push_back(std::move(thread));
 
@@ -294,7 +298,7 @@ public:
 
         } else { // single thread execution
 
-            run(0, key, compute, declarePrerequisites);
+            run(0, key, compute, declarePrerequisites, providedDeclarePrerequisites);
 
         }
 
@@ -302,14 +306,52 @@ public:
 
     }
 
+public:
+
+    CppMemo(int defaultNumThreads = 1, std::size_t estimatedNumEntries = 0, bool detectCircularDependencies = false) :
+            defaultNumThreads(defaultNumThreads),
+            values(estimatedNumEntries),
+            detectCircularDependencies(detectCircularDependencies) {
+    }
+
+    int getDefaultNumThreads() const {
+        return defaultNumThreads;
+    }
+
+    void setDefaultNumThreads(int defaultNumThreads) {
+        if (defaultNumThreads < 1) {
+            throw std::logic_error("The default number of threads must be >= 1");
+        }
+        this->defaultNumThreads = defaultNumThreads;
+    }
+
+    bool getDetectCircularDependencies() const {
+        return detectCircularDependencies;
+    }
+
+    void setDetectCircularDependencies(bool detectCircularDependencies) {
+        this->detectCircularDependencies = detectCircularDependencies;
+    }
+
+    template<typename Compute, typename DeclarePrerequisites>
+    const Value& getValue(const Key& key, Compute compute, DeclarePrerequisites declarePrerequisites, int numThreads) {
+        return getValue(key, compute, declarePrerequisites, numThreads, true);
+    }
+
     template<typename Compute, typename DeclarePrerequisites>
     const Value& getValue(const Key& key, Compute compute, DeclarePrerequisites declarePrerequisites) {
-        return getValue(key, compute, declarePrerequisites, getDefaultNumThreads());
+        return getValue(key, compute, declarePrerequisites, defaultNumThreads, true);
+    }
+
+    template<typename Compute>
+    const Value& getValue(const Key& key, Compute compute, int numThreads) {
+        const auto dummyDeclarePrerequisites = [](const Key&, std::function<void(const Key&)>) {};
+        return getValue(key, compute, dummyDeclarePrerequisites, numThreads, false);
     }
 
     template<typename Compute>
     const Value& getValue(const Key& key, Compute compute) {
-        return getValue(key, compute, unspecifiedDeclarePrerequisites);
+        return getValue(key, compute, defaultNumThreads);
     }
 
     const Value& getValue(const Key& key) const {
@@ -329,6 +371,11 @@ public:
     template<typename Compute, typename DeclarePrerequisites>
     const Value& operator()(const Key& key, Compute compute, DeclarePrerequisites declarePrerequisites) {
         return getValue(key, compute, declarePrerequisites);
+    }
+
+    template<typename Compute>
+    const Value& operator()(const Key& key, Compute compute, int numThreads) {
+        return getValue(key, compute, numThreads);
     }
 
     template<typename Compute>

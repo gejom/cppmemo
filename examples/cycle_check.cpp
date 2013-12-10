@@ -1,5 +1,3 @@
-#define CPPMEMO_DETECT_CIRCULAR_DEPENDENCIES // enables circular dependencies detection
-
 #include "cppmemo.hpp"
 
 #include <utility>
@@ -23,10 +21,11 @@ int ELEM_NO = 200;
 int main(void) {
 
     try {
-        cppmemo::CppMemo<int, int> cppMemo;
+        cppmemo::CppMemo<int, int> cppMemo(1, 0, true);
         cppMemo.getValue(ELEM_NO, calculate, declarePrerequisites);
-    } catch (std::exception& e) {
+    } catch (cppmemo::CircularDependencyException<int>& e) {
         std::cout << e.what() << std::endl;
+        std::cout << "Offending key: " << e.key() << std::endl;
         std::cout << "TEST SUCCEEDED" << std::endl;
         return EXIT_SUCCESS;
     }
