@@ -45,10 +45,10 @@
  * A C++11-compliant compiler is required to compile this file.
  *
  * Please read the documentation on the project website:
- * http://projects.giacomodrago.com/c++memo
+ * @link http://projects.giacomodrago.com/c++memo @endlink
  *
  * This product includes Fcmm, a software developed by Giacomo Drago.
- * Website: http://projects.giacomodrago.com/fcmm
+ * Website: @link http://projects.giacomodrago.com/fcmm @endlink
  *
  */
 
@@ -61,10 +61,10 @@
 #include <functional> // std::function
 #include <algorithm> // std::shuffle
 #include <cstddef> // std::nullptr_t
+#include <stdexcept> // std::logic_error, std::runtime_error
 
 #ifdef CPPMEMO_DETECT_CIRCULAR_DEPENDENCIES
 #include <unordered_set>
-#include <stdexcept>
 #endif
 
 #include <fcmm/fcmm.hpp>
@@ -76,7 +76,7 @@ namespace cppmemo {
  * automatic parallel execution.
  * 
  * Please read the documentation on the project website:
- * http://projects.giacomodrago.com/c++memo
+ * @link http://projects.giacomodrago.com/c++memo @endlink
  */
 template<
     typename Key,
@@ -97,113 +97,150 @@ private:
             std::function<void(const Key&)> /* unused */) {
     }
     
-    template<typename Compute, typename DeclarePrerequisites>
-    void run(int threadNo, const Key& key, Compute compute, DeclarePrerequisites declarePrerequisites) {
-
-        struct StackItem {
+    class ThreadItemsStack {
+        
+    public:
+        
+        struct Item {
             Key key;
             bool ready;
         };
-
-        std::minstd_rand randGen(threadNo);
-        std::vector<StackItem> stack;
-
-#ifdef CPPMEMO_DETECT_CIRCULAR_DEPENDENCIES
-        std::unordered_set<Key, KeyHash1, KeyEqual> stackItems;
-#endif
         
-        const auto push = [&](const Key& key) {
+    private:
+        
 #ifdef CPPMEMO_DETECT_CIRCULAR_DEPENDENCIES
-            if (stackItems.find(key) != stackItems.end()) {
-                throw std::logic_error("Circular dependency detected.");
+        std::unordered_set<Key, KeyHash1, KeyEqual> itemsSet;
+#endif
+        std::vector<Item> items;        
+        int threadNo;
+        std::minstd_rand randGen;
+        std::size_t groupSize;
+        
+    public:
+        
+        ThreadItemsStack(int threadNo) : threadNo(threadNo), randGen(threadNo), groupSize(0) {
+        }
+        
+        void push(const Key& key) {
+#ifdef CPPMEMO_DETECT_CIRCULAR_DEPENDENCIES
+            if (itemsSet.find(key) != itemsSet.end()) {
+                throw std::runtime_error("Circular dependency detected.");
             }
 #endif
-            stack.push_back({ key, false });
-        };
-        const auto pop = [&] {
-#ifdef CPPMEMO_DETECT_CIRCULAR_DEPENDENCIES            
-            const StackItem& item = stack.back();
-            stackItems.erase(item.key);
-#endif
-            stack.pop_back();
-        };
+            items.push_back({ key, false });
+            groupSize++;
+        }
 
-        push(key);
+        void pop() {
+            if (groupSize != 0) {
+                throw std::runtime_error("The current group is not finalized.");
+            }
 #ifdef CPPMEMO_DETECT_CIRCULAR_DEPENDENCIES
-        stackItems.insert(key);
+            const Item& item = items.back();
+            itemsSet.erase(item.key);
 #endif
+            items.pop_back();
+        }
+
+        void finalizeGroup() {
+            if (threadNo > 0 && groupSize > 1) {
+                // shuffle the added prerequisites for improving parallel speedup
+                std::shuffle(items.end() - groupSize, items.end(), randGen);
+            }
+#ifdef CPPMEMO_DETECT_CIRCULAR_DEPENDENCIES
+            for (int i = 1; i <= groupSize; i++) {
+                const Item& addedItem = *(items.end() - i);
+                itemsSet.insert(addedItem.key);
+            }
+#endif
+            groupSize = 0;
+        }
         
+        bool empty() const {
+            return items.empty();
+        }
+        
+        const Item& back() const {
+            return items.back();
+        }
+        
+        Item& back() {
+            return items.back();
+        }
+        
+        std::size_t getGroupSize() const {
+            return groupSize;
+        }
+
+    };
+
+    template<typename Compute, typename DeclarePrerequisites>
+    void run(int threadNo, const Key& key, Compute compute, DeclarePrerequisites declarePrerequisites) {
+
+        ThreadItemsStack stack(threadNo);
+
+        stack.push(key);
+        stack.finalizeGroup();
+
         while (!stack.empty()) {
 
-            StackItem& item = stack.back();
-            const Key itemKey = item.key;
-            const bool itemReady = item.ready;
+            typename ThreadItemsStack::Item& item = stack.back();
 
-            if (itemReady) {
-                pop();
-            } else {
-                item.ready = true;
-            }
-
-            if (itemReady) {
+            if (item.ready) {
 
                 const auto prerequisites = [&](const Key& key) -> const Value& {
                     return values[key];
                 };
 
-                values.insert(itemKey, [&](const Key& key) -> Value {
+                values.insert(item.key, [&](const Key& key) -> Value {
                     return compute(key, prerequisites);
                 });
 
-            } else if (values.find(itemKey) == values.end()) {
+                stack.pop();
 
-                int noPrerequisites = 0;
+            } else {
 
-                if (declarePrerequisites != reinterpret_cast<DeclarePrerequisites>(unspecifiedDeclarePrerequisites)) {
-                    
-                    // execute the declarePrerequisites function to get prerequisites
+                item.ready = true;
 
-                    declarePrerequisites(itemKey, [&](const Key& prerequisite) {
-                        if (values.find(prerequisite) == values.end()) {
-                            push(prerequisite);
-                            noPrerequisites++;
+                const Key itemKey = item.key; // copy item key
+
+                if (values.find(itemKey) == values.end()) {
+
+                    if (declarePrerequisites != reinterpret_cast<DeclarePrerequisites>(unspecifiedDeclarePrerequisites)) {
+
+                        // execute the declarePrerequisites function to get prerequisites
+
+                        declarePrerequisites(itemKey, [&](const Key& prerequisite) {
+                            if (values.find(prerequisite) == values.end()) {
+                                stack.push(prerequisite);
+                            }
+                        });
+
+                    } else {
+
+                        // dry-run the compute function to capture prerequisites
+
+                        const Value dummy = Value();
+                        const Value itemValue = compute(itemKey, [&](const Key& prerequisite) -> const Value& {
+                            const auto findIt = values.find(prerequisite);
+                            if (findIt == values.end()) {
+                                stack.push(prerequisite);
+                                return dummy; // return an invalid value
+                            } else {
+                                return findIt->second; // return a valid value
+                            }
+                        });
+
+                        if (stack.getGroupSize() == 0) { // the computed value is valid
+                            values.emplace(itemKey, itemValue);
+                            stack.pop();
                         }
-                    });
 
-                } else {
-                    
-                    // dry-run the compute function to capture prerequisites
-                    
-                    const Value dummy = Value();
-                    const Value itemValue = compute(itemKey, [&](const Key& prerequisite) -> const Value& {
-                        const auto findIt = values.find(prerequisite);
-                        if (findIt == values.end()) {
-                            push(prerequisite);
-                            noPrerequisites++;
-                            return dummy; // return an invalid value
-                        } else {
-                            return findIt->second; // return a valid value
-                        }
-                    });
-                    
-                    if (noPrerequisites == 0) { // the computed value is valid
-                        values.emplace(itemKey, itemValue);
-                        pop();
                     }
 
-                }
+                    stack.finalizeGroup();
 
-                if (threadNo > 0 && noPrerequisites > 1) {
-                    // shuffle the added prerequisites for improving parallel speedup
-                    std::shuffle(stack.end() - noPrerequisites, stack.end(), randGen);
                 }
-
-#ifdef CPPMEMO_DETECT_CIRCULAR_DEPENDENCIES
-                for (int i = 1; i <= noPrerequisites; i++) {
-                    const StackItem& addedItem = *(stack.end() - i);
-                    stackItems.insert(addedItem.key);
-                }
-#endif
 
             }
 
@@ -264,17 +301,17 @@ public:
         return values[key];
 
     }
-    
+
     template<typename Compute, typename DeclarePrerequisites>
     const Value& getValue(const Key& key, Compute compute, DeclarePrerequisites declarePrerequisites) {
         return getValue(key, compute, declarePrerequisites, getDefaultNumThreads());
     }
-    
+
     template<typename Compute>
     const Value& getValue(const Key& key, Compute compute) {
         return getValue(key, compute, unspecifiedDeclarePrerequisites);
     }
-    
+
     const Value& getValue(const Key& key) const {
         const auto findIt = values.find(key);
         if (findIt != values.end()) {
@@ -283,22 +320,22 @@ public:
             throw std::logic_error("The value is not memoized");
         }
     }
-    
+
     template<typename Compute, typename DeclarePrerequisites>
     const Value& operator()(const Key& key, Compute compute, DeclarePrerequisites declarePrerequisites, int numThreads) {
         return getValue(key, compute, declarePrerequisites, numThreads);
     }
-    
+
     template<typename Compute, typename DeclarePrerequisites>
     const Value& operator()(const Key& key, Compute compute, DeclarePrerequisites declarePrerequisites) {
         return getValue(key, compute, declarePrerequisites);
     }
-    
+
     template<typename Compute>
     const Value& operator()(const Key& key, Compute compute) {
         return getValue(key, compute);
     }
-    
+
     const Value& operator()(const Key& key) const {
         return getValue(key);
     }
