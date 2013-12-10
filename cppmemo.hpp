@@ -76,9 +76,9 @@ class CircularDependencyException : public std::exception {
     
 private:
     
-    Key m_key;
+    std::vector<Key> keysStack;
     
-    CircularDependencyException(const Key& key) : m_key(key) {
+    CircularDependencyException(const std::vector<Key>& keysStack) : keysStack(keysStack) {
     }
     
 public:
@@ -87,8 +87,8 @@ public:
         return "Circular dependency detected.";
     }
     
-    const Key& key() const {
-        return m_key;
+    const std::vector<Key>& getKeysStack() const {
+        return keysStack;
     }
     
 };
@@ -126,12 +126,22 @@ private:
         
     private:
         
-        std::unordered_set<Key, KeyHash1, KeyEqual> itemsSet;
-        std::vector<Item> items;        
         int threadNo;
         std::minstd_rand randGen;
         std::size_t groupSize;
         bool detectCircularDependencies;
+
+        std::vector<Item> items;        
+        std::unordered_set<Key, KeyHash1, KeyEqual> itemsSet;
+        
+        std::vector<Key> getKeysStack() const {
+            std::vector<Key> result;
+            result.reserve(items.size());
+            for (const Item& item : items) {
+                result.push_back(item.key);
+            }
+            return result;
+        }
         
     public:
         
@@ -141,12 +151,12 @@ private:
         }
         
         void push(const Key& key) {
+            items.push_back({ key, false });
             if (detectCircularDependencies) {
                 if (itemsSet.find(key) != itemsSet.end()) {
-                    throw CircularDependencyException<Key>(key);
+                    throw CircularDependencyException<Key>(getKeysStack());
                 }
             }
-            items.push_back({ key, false });
             groupSize++;
         }
 
