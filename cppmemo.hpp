@@ -44,7 +44,7 @@
  *
  * A C++11-compliant compiler is required to compile this file.
  *
- * Please read the documentation (including important caveats) on the project website:
+ * Please read the documentation on the project website:
  * http://projects.giacomodrago.com/c++memo
  *
  * This product includes Fcmm, a software developed by Giacomo Drago.
@@ -74,6 +74,9 @@ namespace cppmemo {
 /**
  * This class implements a generic framework for memoization supporting
  * automatic parallel execution.
+ * 
+ * Please read the documentation on the project website:
+ * http://projects.giacomodrago.com/c++memo
  */
 template<
     typename Key,
@@ -226,7 +229,7 @@ public:
     }
 
     template<typename Compute, typename DeclarePrerequisites>
-    Value getValue(const Key& key, Compute compute, DeclarePrerequisites declarePrerequisites, int numThreads) {
+    const Value& getValue(const Key& key, Compute compute, DeclarePrerequisites declarePrerequisites, int numThreads) {
 
         const auto findIt = values.find(key);
         if (findIt != values.end()) {
@@ -261,30 +264,42 @@ public:
         return values[key];
 
     }
-
+    
     template<typename Compute, typename DeclarePrerequisites>
-    Value getValue(const Key& key, Compute compute, DeclarePrerequisites declarePrerequisites) {
+    const Value& getValue(const Key& key, Compute compute, DeclarePrerequisites declarePrerequisites) {
         return getValue(key, compute, declarePrerequisites, getDefaultNumThreads());
     }
     
     template<typename Compute>
-    Value getValue(const Key& key, Compute compute) {
-        return getValue(key, compute, unspecifiedDeclarePrerequisites, getDefaultNumThreads());
+    const Value& getValue(const Key& key, Compute compute) {
+        return getValue(key, compute, unspecifiedDeclarePrerequisites);
     }
-
-    Value getValue(const Key& key) {
-
+    
+    const Value& getValue(const Key& key) const {
         const auto findIt = values.find(key);
-
         if (findIt != values.end()) {
             return findIt->second;
         } else {
-            throw std::logic_error("The compute function must be provided when the value is not memoized");
+            throw std::logic_error("The value is not memoized");
         }
-
     }
-
-    Value operator()(const Key& key) {
+    
+    template<typename Compute, typename DeclarePrerequisites>
+    const Value& operator()(const Key& key, Compute compute, DeclarePrerequisites declarePrerequisites, int numThreads) {
+        return getValue(key, compute, declarePrerequisites, numThreads);
+    }
+    
+    template<typename Compute, typename DeclarePrerequisites>
+    const Value& operator()(const Key& key, Compute compute, DeclarePrerequisites declarePrerequisites) {
+        return getValue(key, compute, declarePrerequisites);
+    }
+    
+    template<typename Compute>
+    const Value& operator()(const Key& key, Compute compute) {
+        return getValue(key, compute);
+    }
+    
+    const Value& operator()(const Key& key) const {
         return getValue(key);
     }
 

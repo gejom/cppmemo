@@ -436,17 +436,19 @@ private:
         /**
          * @brief Inserts a new entry into the submap, if the submap doesn't already contain an entry with the same key.
          *
-         * The value is calculated as needed by calling the `computeValue` function.
+         * The value is calculated as needed by calling the `computeValue` function or functor.
          *
-         * @param key                  the key of the entry to be inserted
-         * @param hash1                the first hash of the key
-         * @param hash2                the second hash of the key
-         * @param computeValue         a function or lambda expression that, given the key, calculates the corresponding value
+         * @param key                    the key of the entry to be inserted
+         * @param hash1                  the first hash of the key
+         * @param hash2                  the second hash of the key
+         * @param computeValue           a function or functor that, given the key, calculates the corresponding value
          *
-         * @return                     a pair consisting of the index of the entry (either inserted or preventing the insertion)
-         *                             and a `bool` denoting whether the entry was inserted
+         * @return                       a pair consisting of the index of the entry (either inserted or preventing the insertion)
+         *                               and a `bool` denoting whether the entry was inserted
          *
-         * @throw FullSubmapException  thrown if the new entry could not be inserted because the submap is full
+         * @tparam ComputeValueFunction  function or functor implementing `Value operator()(const Key&)`
+         *
+         * @throw FullSubmapException    thrown if the new entry could not be inserted because the submap is full
          *
          */
         template<typename ComputeValueFunction>
@@ -687,15 +689,17 @@ private:
     /**
      * @brief Inserts a new entry into the map.
      *
-     * The value is calculated as needed by calling the `computeValue` function.
+     * The value is calculated as needed by calling the `computeValue` function or functor.
      *
-     * @param key           the key of the entry to be inserted
-     * @param hash1         the first hash of the key
-     * @param hash2         the second hash of the key
-     * @param computeValue  a function or lambda expression that, given the key, calculates the corresponding value
+     * @param key                    the key of the entry to be inserted
+     * @param hash1                  the first hash of the key
+     * @param hash2                  the second hash of the key
+     * @param computeValue           a function or functor that, given the key, calculates the corresponding value
      *
-     * @return              a pair consisting of a @link const_iterator @endlink to the inserted entry (or to the entry
-     *                      that prevented the insertion) and a `bool` denoting whether the insertion took place
+     * @tparam ComputeValueFunction  function or functor implementing `Value operator()(const Key&)`
+     *
+     * @return                       a pair consisting of a @link const_iterator @endlink to the inserted entry (or to the entry
+     *                               that prevented the insertion) and a `bool` denoting whether the insertion took place
      */
     template<typename ComputeValueFunction>
     std::pair<const_iterator, bool> insertHelper(const Key& key, std::size_t hash1, std::size_t hash2, ComputeValueFunction computeValue) {
@@ -814,13 +818,15 @@ public:
     /**
      * @brief Inserts a new entry into the map.
      *
-     * The value is calculated as needed by calling the `computeValue` function.
+     * The value is calculated as needed by calling the `computeValue` function or functor.
      *
-     * @param key           the key of the entry to be inserted
-     * @param computeValue  a function or lambda expression that, given the key, calculates the corresponding value
+     * @param key                    the key of the entry to be inserted
+     * @param computeValue           a function or functor that, given the key, calculates the corresponding value
      *
-     * @return              a pair consisting of a @link const_iterator @endlink to the inserted entry (or to the entry
-     *                      that prevented the insertion) and a `bool` denoting whether the insertion took place
+     * @tparam ComputeValueFunction  function or functor implementing `Value operator()(const Key&)`
+     *
+     * @return                       a pair consisting of a @link const_iterator @endlink to the inserted entry (or to the entry
+     *                               that prevented the insertion) and a `bool` denoting whether the insertion took place
      */
     template<typename ComputeValueFunction>
     std::pair<const_iterator, bool> insert(const Key& key, ComputeValueFunction computeValue) {
@@ -828,7 +834,7 @@ public:
     }
 
     /**
-     * @brief Inserts a new entry into the map
+     * @brief Inserts a new entry into the map.
      *
      * @param entry  the entry to be inserted
      *
@@ -912,10 +918,12 @@ public:
      *
      * The new map is created via `new` and it is responsibility of the caller to `delete` it.
      *
-     * @param filterFunction  a function or lambda expression that, given an entry, returns `true` if
-     *                        it should be kept, `false` if it should be filtered out
+     * @param filterFunction   a function or functor that, given an entry, returns `true` if
+     *                         it should be kept, `false` if it should be filtered out
      *
-     * @return                the filtered map
+     * @tparam FilterFunction  function or functor implementing `bool operator()(const Entry&)`
+     *
+     * @return                 the filtered map
      */
     template<typename FilterFunction>
     Fcmm* filter(FilterFunction filterFunction) const {
@@ -940,7 +948,7 @@ public:
      *
      * The new map is created via `new` and it is responsibility of the caller to `delete` it.
      */
-    
+
     Fcmm* clone() const {
         return filter([](const Entry&) { return true; });
     }
