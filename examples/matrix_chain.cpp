@@ -127,9 +127,8 @@ int main(int argc, char** argv) {
             std::cout << i;
         }
         std::cout << " }" << std::endl;
+        std::cout << std::endl;
     }
-
-    std::cout << std::endl;
 
     cppmemo::CppMemo<Range, Result, RangeHash1, RangeHash2> cppMemo(numThreads, numMatrices * numMatrices);
 
