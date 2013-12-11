@@ -73,7 +73,7 @@ namespace cppmemo {
  * This requires <i>circular dependency detection</i> to be enabled (via the
  * `detectCircularDependencies` argument of @link CppMemo @endlink constructor).
  *
- * @tparam Key the type of the key
+ * @tparam Key the type of the keys
  */
 template<typename Key>
 class CircularDependencyException : public std::exception {
@@ -203,10 +203,10 @@ private:
         void finalizeGroup() {
             if (threadNo != 0 && groupSize > 1) {
                 if (threadNo == 1) {
-                    // reverse the added prerequisites for improving parallel speedup
+                    // reverse the added prerequisites of improving parallel speedup
                     std::reverse(items.end() - groupSize, items.end());
                 } else {
-                    // shuffle the added prerequisites for improving parallel speedup
+                    // shuffle the added prerequisites of improving parallel speedup
                     std::shuffle(items.end() - groupSize, items.end(), randGen);                    
                 }
             }
@@ -272,7 +272,7 @@ public:
          * <span style="font-weight: bold; color: red">Important note</span>.
          * If a `CppMemo::getValue()` overload was called that does not accept a
          * `DeclarePrerequisites` function, then this method may return an invalid, default-constructed value,
-         * and "track" the request as an indirect means to gather prerequisites for a given key
+         * and "track" the request as an indirect means to gather prerequisites of a given key
          * (via a dry run of the `Compute` funtion).
          *
          * @see `CppMemo::getValue()`
@@ -482,11 +482,11 @@ public:
     }
 
     /**
-     * @brief Returns the value corresponding to the requested key, calculating (and memoizing) it as needed.
+     * @brief Returns the value corresponding to the requested key, computing (and memoizing) it as needed.
      *
      * @param key                    the requested key
-     * @param compute                a function or functor used to calculate the value corresponding to a given key
-     * @param declarePrerequisites   a function or functor used to gather the prerequisites for a given key
+     * @param compute                a function or functor used to compute the value corresponding to a given key
+     * @param declarePrerequisites   a function or functor used to gather the prerequisites of a given key
      * @param numThreads             the number of threads to be started
      *
      * @tparam Compute               function or functor implementing `Value operator()(const Key&, typename CppMemo<Key, Value, KeyHash1, KeyHash2, KeyEqual>::PrerequisitesProvider)`
@@ -500,13 +500,13 @@ public:
     }
 
     /**
-     * @brief Returns the value corresponding to the requested key, calculating (and memoizing) it as needed.
+     * @brief Returns the value corresponding to the requested key, computing (and memoizing) it as needed.
      *
      * The default number of threads will be started (see setDefaultNumThreads()).
      *
      * @param key                    the requested key
-     * @param compute                a function or functor used to calculate the value corresponding to a given key
-     * @param declarePrerequisites   a function or functor used to gather the prerequisites for a given key
+     * @param compute                a function or functor used to compute the value corresponding to a given key
+     * @param declarePrerequisites   a function or functor used to gather the prerequisites of a given key
      *
      * @tparam Compute               function or functor implementing `Value operator()(const Key&, typename CppMemo<Key, Value, KeyHash1, KeyHash2, KeyEqual>::PrerequisitesProvider)`
      * @tparam DeclarePrerequisites  function or functor implementing `void operator()(const Key&, typename CppMemo<Key, Value, KeyHash1, KeyHash2, KeyEqual>::PrerequisitesGatherer)`
@@ -519,15 +519,15 @@ public:
     }
 
     /**
-     * @brief Returns the value corresponding to the requested key, calculating (and memoizing) it as needed.
+     * @brief Returns the value corresponding to the requested key, computing (and memoizing) it as needed.
      *
      * <span style="font-weight: bold; color: red">Important note</span>.
-     * This overload omits the `DeclarePrerequisites` parameter: the prerequisites for a given key
+     * This overload omits the `DeclarePrerequisites` parameter: the prerequisites of a given key
      * are gathered indirectly by dry running the `Compute` function.
      * Please read the relevant documentation on the project website.
      *
      * @param key                    the requested key
-     * @param compute                a function or functor used to calculate the value corresponding to a given key
+     * @param compute                a function or functor used to compute the value corresponding to a given key
      * @param numThreads             the number of threads to be started
      *
      * @tparam Compute               function or functor implementing `Value operator()(const Key&, typename CppMemo<Key, Value, KeyHash1, KeyHash2, KeyEqual>::PrerequisitesProvider)`
@@ -541,17 +541,17 @@ public:
     }
 
     /**
-     * @brief Returns the value corresponding to the requested key, calculating (and memoizing) it as needed.
+     * @brief Returns the value corresponding to the requested key, computing (and memoizing) it as needed.
      *
      * The default number of threads will be started (see setDefaultNumThreads()).
      *
      * <span style="font-weight: bold; color: red">Important note</span>.
-     * This overload omits the `DeclarePrerequisites` parameter: the prerequisites for a given key
+     * This overload omits the `DeclarePrerequisites` parameter: the prerequisites of a given key
      * are gathered indirectly by dry running the `Compute` function.
      * Please read the relevant documentation on the project website.
      *
      * @param key                    the requested key
-     * @param compute                a function or functor used to calculate the value corresponding to a given key
+     * @param compute                a function or functor used to compute the value corresponding to a given key
      *
      * @tparam Compute               function or functor implementing `Value operator()(const Key&, typename CppMemo<Key, Value, KeyHash1, KeyHash2, KeyEqual>::PrerequisitesProvider)`
      *
