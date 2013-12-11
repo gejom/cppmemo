@@ -39,16 +39,16 @@
  * @section DESCRIPTION
  *
  * This header file contains a generic framework for memoization (see
- * @link http://en.wikipedia.org/wiki/Memoization @endlink) supporting parallel
+ * http://en.wikipedia.org/wiki/Memoization) supporting parallel
  * execution.
  *
  * A C++11-compliant compiler is required to compile this file.
  *
  * Please read the documentation on the project website:
- * @link http://projects.giacomodrago.com/c++memo @endlink
+ * http://projects.giacomodrago.com/c++memo
  *
  * This product includes Fcmm, a software developed by Giacomo Drago.
- * Website: @link http://projects.giacomodrago.com/fcmm @endlink
+ * Website: http://projects.giacomodrago.com/fcmm
  *
  */
 
@@ -67,6 +67,14 @@
 
 namespace cppmemo {
 
+/**
+ * @brief This exception is thrown when a circular dependency among the keys is detected.
+ *
+ * This requires <i>circular dependency detection</i> to be enabled (via the
+ * `detectCircularDependencies` argument of @link CppMemo @endlink constructor).
+ *
+ * @tparam Key the type of the key
+ */
 template<typename Key>
 class CircularDependencyException : public std::exception {
     
@@ -82,10 +90,18 @@ private:
     
 public:
     
+    /**
+     * @brief Returns a C string identifying the exception.
+     */
     const char* what() const noexcept {
         return "Circular dependency detected.";
     }
     
+    /**
+     * @brief Returns the keys stack at the time the circular dependency was detected.
+     *
+     * @return The keys stack (from bottom to top) as a vector
+     */
     const std::vector<Key>& getKeysStack() const {
         return keysStack;
     }
@@ -93,11 +109,23 @@ public:
 };
 
 /**
- * This class implements a generic framework for memoization supporting
+ * @brief This class implements a generic framework for memoization supporting
  * automatic parallel execution.
  * 
- * Please read the documentation on the project website:
- * @link http://projects.giacomodrago.com/c++memo @endlink
+ * Please read the documentation on the project website: http://projects.giacomodrago.com/c++memo
+ *
+ * @tparam Key       the type of the key (default-constructible and copy-constructible)
+ * @tparam Value     the type of the value (default-constructible and copy-constructible)
+ * @tparam KeyHash1  the type of a function object that calculates the hash of the key;
+ *                   it should have the same interface as
+ *                   <a href="http://en.cppreference.com/w/cpp/utility/hash">std::hash<T></a>
+ * @tparam KeyHash2  the type of another function object that calculates the hash of the key:
+ *                   it should be <i>completely independent from KeyHash1</i>;
+ *                   the default for this template parameter is only available for
+ *                   <a href="http://en.cppreference.com/w/cpp/types/is_integral">integral types</a>.
+ * @tparam KeyEqual  the type of the function object that checks the equality of the two keys;
+ *                   it should have the same interface as
+ *                   <a href="http://en.cppreference.com/w/cpp/utility/functional/equal_to">std::equal_to<T></a>
  */
 template<
     typename Key,
@@ -211,29 +239,49 @@ private:
     
 public:
     
+    /**
+     * @brief The function object providing prerequisites to the `Compute` function passed to
+     * an appropriate `CppMemo::getValue()` overload.
+     */
     class PrerequisitesProvider {
         
         friend class CppMemo<Key, Value, KeyHash1, KeyHash2, KeyEqual>;
         
     private:
-        
+
         enum Mode { NORMAL, DRY_RUN };
-        
+
         const Values* values;
         ThreadItemsStack* stack;
         Mode mode;
         Value dummyValue;
-        
+
         PrerequisitesProvider(const Values* values, ThreadItemsStack* stack) :
                 values(values), stack(stack), mode(NORMAL), dummyValue() {
         }
-        
+
         void setMode(Mode mode) {
             this->mode = mode;
         }
-        
+
     public:
-        
+
+        /**
+         * @brief Provides the value corresponding to the given key.
+         *
+         * <span style="font-weight: bold; color: red">Important note</span>.
+         * If a `CppMemo::getValue()` overload was called that does not accept a
+         * `DeclarePrerequisites` function, then this method may return an invalid, default-constructed value,
+         * and "track" the request as an indirect means to gather prerequisites for a given key
+         * (via a dry run of the `Compute` funtion).
+         *
+         * @see `CppMemo::getValue()`
+         *
+         * @param  key the requested key
+         *
+         * @return the value corresponding to the requested key, or an invalid, default-constructed value
+         *         (if dry running the `Compute` function)
+         */
         const Value& operator()(const Key& key) {
             if (mode == NORMAL) {
                 return (*values)[key];
@@ -247,31 +295,40 @@ public:
                 }
             }
         }
-        
+
     };
-    
-    class PrerequisitesDeclarer {
-        
+
+    /**
+     * @brief The function object gathering prerequisites from the `DeclarePrerequisites` function
+     * passed to an appropriate `CppMemo::getValue()` overload.
+     */
+    class PrerequisitesGatherer {
+
         friend class CppMemo<Key, Value, KeyHash1, KeyHash2, KeyEqual>;
-        
+
     private:
-        
+
         const Values* values;
         ThreadItemsStack* stack;
-        
-        PrerequisitesDeclarer(const Values* values, ThreadItemsStack* stack) : values(values), stack(stack) {
+
+        PrerequisitesGatherer(const Values* values, ThreadItemsStack* stack) : values(values), stack(stack) {
         }
-        
+
     public:
-        
+
+        /**
+         * @brief Gathers a prerequisite.
+         *
+         * @param key a prerequisite key
+         */
         void operator()(const Key& key) {
             if (values->find(key) == values->end()) {
                 stack->push(key);
             }
         }
-        
+
     };
-    
+
 private:
 
     template<typename Compute, typename DeclarePrerequisites>
@@ -282,16 +339,16 @@ private:
 
         stack.push(key);
         stack.finalizeGroup();
-        
+
         PrerequisitesProvider prerequisitesProvider(&values, &stack);
-        PrerequisitesDeclarer prerequisitesDeclarer(&values, &stack);
+        PrerequisitesGatherer prerequisitesDeclarer(&values, &stack);
 
         while (!stack.empty()) {
 
             typename ThreadItemsStack::Item& item = stack.back();
 
             if (item.ready) {
-                
+
                 prerequisitesProvider.setMode(PrerequisitesProvider::NORMAL);
                 values.insert(item.key, [&](const Key& key) -> Value {
                     return compute(key, prerequisitesProvider);
@@ -377,16 +434,30 @@ private:
 
 public:
 
+    /**
+     * @brief Constructor.
+     *
+     * @param defaultNumThreads           the default number of threads to be started
+     * @param estimatedNumEntries         an estimate for the number of memoized entries that will be stored in
+     *                                    this class instance
+     * @param detectCircularDependencies  enable circular dependency detection
+     */
     CppMemo(int defaultNumThreads = 1, std::size_t estimatedNumEntries = 0, bool detectCircularDependencies = false) :
             values(estimatedNumEntries),
             detectCircularDependencies(detectCircularDependencies) {
         setDefaultNumThreads(defaultNumThreads);
     }
 
+    /**
+     * @brief Returns the default number of threads to be started.
+     */
     int getDefaultNumThreads() const {
         return defaultNumThreads;
     }
 
+    /**
+     * @brief Sets the default number of threads to be started.
+     */
     void setDefaultNumThreads(int defaultNumThreads) {
         if (defaultNumThreads < 1) {
             throw std::logic_error("The default number of threads must be >= 1");
@@ -394,35 +465,113 @@ public:
         this->defaultNumThreads = defaultNumThreads;
     }
 
+    /**
+     * @brief Returns `true` if circular dependency detection is enabled, `false` otherwise.
+     */
     bool getDetectCircularDependencies() const {
         return detectCircularDependencies;
     }
 
+    /**
+     * @brief Enables or disables circular dependency detection.
+     *
+     * @param detectCircularDependencies `true` to enable circular dependency detection, `false` to disable it
+     */
     void setDetectCircularDependencies(bool detectCircularDependencies) {
         this->detectCircularDependencies = detectCircularDependencies;
     }
 
+    /**
+     * @brief Returns the value corresponding to the requested key, calculating (and memoizing) it as needed.
+     *
+     * @param key                    the requested key
+     * @param compute                a function or functor used to calculate the value corresponding to a given key
+     * @param declarePrerequisites   a function or functor used to gather the prerequisites for a given key
+     * @param numThreads             the number of threads to be started
+     *
+     * @tparam Compute               function or functor implementing `Value operator()(const Key&, typename CppMemo<Key, Value, KeyHash1, KeyHash2, KeyEqual>::PrerequisitesProvider)`
+     * @tparam DeclarePrerequisites  function or functor implementing `void operator()(const Key&, typename CppMemo<Key, Value, KeyHash1, KeyHash2, KeyEqual>::PrerequisitesGatherer)`
+     *
+     * @return the value corresponding to the requested key
+     */
     template<typename Compute, typename DeclarePrerequisites>
     const Value& getValue(const Key& key, Compute compute, DeclarePrerequisites declarePrerequisites, int numThreads) {
         return getValue(key, compute, declarePrerequisites, numThreads, true);
     }
 
+    /**
+     * @brief Returns the value corresponding to the requested key, calculating (and memoizing) it as needed.
+     *
+     * The default number of threads will be started (see setDefaultNumThreads()).
+     *
+     * @param key                    the requested key
+     * @param compute                a function or functor used to calculate the value corresponding to a given key
+     * @param declarePrerequisites   a function or functor used to gather the prerequisites for a given key
+     *
+     * @tparam Compute               function or functor implementing `Value operator()(const Key&, typename CppMemo<Key, Value, KeyHash1, KeyHash2, KeyEqual>::PrerequisitesProvider)`
+     * @tparam DeclarePrerequisites  function or functor implementing `void operator()(const Key&, typename CppMemo<Key, Value, KeyHash1, KeyHash2, KeyEqual>::PrerequisitesGatherer)`
+     *
+     * @return the value corresponding to the requested key
+     */
     template<typename Compute, typename DeclarePrerequisites>
     const Value& getValue(const Key& key, Compute compute, DeclarePrerequisites declarePrerequisites) {
         return getValue(key, compute, declarePrerequisites, defaultNumThreads, true);
     }
 
+    /**
+     * @brief Returns the value corresponding to the requested key, calculating (and memoizing) it as needed.
+     *
+     * <span style="font-weight: bold; color: red">Important note</span>.
+     * This overload omits the `DeclarePrerequisites` parameter: the prerequisites for a given key
+     * are gathered indirectly by dry running the `Compute` function.
+     * Please read the relevant documentation on the project website.
+     *
+     * @param key                    the requested key
+     * @param compute                a function or functor used to calculate the value corresponding to a given key
+     * @param numThreads             the number of threads to be started
+     *
+     * @tparam Compute               function or functor implementing `Value operator()(const Key&, typename CppMemo<Key, Value, KeyHash1, KeyHash2, KeyEqual>::PrerequisitesProvider)`
+     *
+     * @return the value corresponding to the requested key
+     */
     template<typename Compute>
     const Value& getValue(const Key& key, Compute compute, int numThreads) {
-        const auto dummyDeclarePrerequisites = [](const Key&, PrerequisitesDeclarer&) {};
+        const auto dummyDeclarePrerequisites = [](const Key&, PrerequisitesGatherer&) {};
         return getValue(key, compute, dummyDeclarePrerequisites, numThreads, false);
     }
 
+    /**
+     * @brief Returns the value corresponding to the requested key, calculating (and memoizing) it as needed.
+     *
+     * The default number of threads will be started (see setDefaultNumThreads()).
+     *
+     * <span style="font-weight: bold; color: red">Important note</span>.
+     * This overload omits the `DeclarePrerequisites` parameter: the prerequisites for a given key
+     * are gathered indirectly by dry running the `Compute` function.
+     * Please read the relevant documentation on the project website.
+     *
+     * @param key                    the requested key
+     * @param compute                a function or functor used to calculate the value corresponding to a given key
+     *
+     * @tparam Compute               function or functor implementing `Value operator()(const Key&, typename CppMemo<Key, Value, KeyHash1, KeyHash2, KeyEqual>::PrerequisitesProvider)`
+     *
+     * @return the value corresponding to the requested key
+     */
     template<typename Compute>
     const Value& getValue(const Key& key, Compute compute) {
         return getValue(key, compute, defaultNumThreads);
     }
 
+    /**
+     * @brief Returns the memoized value corresponding to the requested key. If no value is memoized,
+     * a `std::logic_error` exception is thrown.
+     *
+     * @param key the requested key
+     *
+     * @return the memoized value corresponding to the requested key
+     *
+     * @throw std::logic_error thrown if no value for the requested key is memoized
+     */
     const Value& getValue(const Key& key) const {
         const auto findIt = values.find(key);
         if (findIt != values.end()) {
@@ -432,26 +581,41 @@ public:
         }
     }
 
+    /**
+     * @brief Alias for getValue(const Key&, Compute, DeclarePrerequisites, int)
+     */
     template<typename Compute, typename DeclarePrerequisites>
     const Value& operator()(const Key& key, Compute compute, DeclarePrerequisites declarePrerequisites, int numThreads) {
         return getValue(key, compute, declarePrerequisites, numThreads);
     }
 
+    /**
+     * @brief Alias for getValue(const Key&, Compute, DeclarePrerequisites)
+     */
     template<typename Compute, typename DeclarePrerequisites>
     const Value& operator()(const Key& key, Compute compute, DeclarePrerequisites declarePrerequisites) {
         return getValue(key, compute, declarePrerequisites);
     }
 
+    /**
+     * @brief Alias for getValue(const Key&, Compute, int)
+     */
     template<typename Compute>
     const Value& operator()(const Key& key, Compute compute, int numThreads) {
         return getValue(key, compute, numThreads);
     }
 
+    /**
+     * @brief Alias for getValue(const Key&, Compute)
+     */
     template<typename Compute>
     const Value& operator()(const Key& key, Compute compute) {
         return getValue(key, compute);
     }
 
+    /**
+     * @brief Alias for getValue(const Key&)
+     */
     const Value& operator()(const Key& key) const {
         return getValue(key);
     }
