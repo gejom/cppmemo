@@ -178,7 +178,7 @@ private:
                 std::shuffle(items.end() - groupSize, items.end(), randGen);
             }
             if (detectCircularDependencies) {
-                for (int i = 1; i <= groupSize; i++) {
+                for (std::size_t i = 1; i <= groupSize; i++) {
                     const Item& addedItem = *(items.end() - i);
                     itemsSet.insert(addedItem.key);
                 }
