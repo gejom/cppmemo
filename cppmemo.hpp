@@ -451,7 +451,7 @@ public:
         return getValue(key);
     }
 
-    // the class shall not be copied or moved (because of Fcmm)
+    // the class shall not be copied or moved (because of fcmm)
     CppMemo(const CppMemo&) = delete;
     CppMemo(CppMemo&&) = delete;
 
