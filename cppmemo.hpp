@@ -173,9 +173,14 @@ private:
         }
 
         void finalizeGroup() {
-            if (threadNo > 0 && groupSize > 1) {
-                // shuffle the added prerequisites for improving parallel speedup
-                std::shuffle(items.end() - groupSize, items.end(), randGen);
+            if (threadNo != 0 && groupSize > 1) {
+                if (threadNo == 1) {
+                    // reverse the added prerequisites for improving parallel speedup
+                    std::reverse(items.end() - groupSize, items.end());
+                } else {
+                    // shuffle the added prerequisites for improving parallel speedup
+                    std::shuffle(items.end() - groupSize, items.end(), randGen);                    
+                }
             }
             if (detectCircularDependencies) {
                 for (std::size_t i = 1; i <= groupSize; i++) {
