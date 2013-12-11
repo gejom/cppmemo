@@ -3,7 +3,9 @@
 #include <utility>
 #include <iostream>
 
-void declarePrerequisites(int i, std::function<void(int)> declare) {
+using namespace cppmemo;
+
+void declarePrerequisites(int i, typename CppMemo<int, int>::PrerequisitesDeclarer declare) {
     if (i != 0) {
         // circular dependency (intentionally added)
         if (i == 8) declare(13);
@@ -11,7 +13,7 @@ void declarePrerequisites(int i, std::function<void(int)> declare) {
     }
 }
 
-int calculate(int i, std::function<int(int)> prereqs) {
+int calculate(int i, typename CppMemo<int, int>::PrerequisitesProvider prereqs) {
     if (i == 0) return 0;
     else return 1 + prereqs(i-1);
 }
@@ -21,9 +23,9 @@ int ELEM_NO = 20;
 int main(void) {
 
     try {
-        cppmemo::CppMemo<int, int> cppMemo(1, 0, true);
+        CppMemo<int, int> cppMemo(1, 0, true);
         cppMemo.getValue(ELEM_NO, calculate, declarePrerequisites);
-    } catch (cppmemo::CircularDependencyException<int>& e) {
+    } catch (CircularDependencyException<int>& e) {
         std::cout << e.what() << std::endl;
         std::cout << "Keys stack:";
         for (auto it = e.getKeysStack().rbegin(); it != e.getKeysStack().rend(); ++it) {

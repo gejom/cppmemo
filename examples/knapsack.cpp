@@ -4,6 +4,8 @@
 #include <iostream>
 #include <iomanip> // std::setw
 
+using namespace cppmemo;
+
 static const std::vector<int> WEIGHTS = {0, // 0-th element is never used
         3851, 29521, 18550, 2453, 18807, 20622, 17505, 18855, 75601, 8657,
         9411, 15447, 20454, 96502, 56825, 15199, 25559, 56504, 95545, 8580,
@@ -42,7 +44,9 @@ struct KeyHash2 {
     }
 };
 
-int knapsack(const Key& key, std::function<int(Key)> prereqs) {
+typedef CppMemo<Key, int, KeyHash1, KeyHash2> CppMemoType;
+
+int knapsack(const Key& key, typename CppMemoType::PrerequisitesProvider prereqs) {
     if (key.items == 0) return 0;
     if (WEIGHTS[key.items] > key.weight) {
         return prereqs({ key.items - 1, key.weight });
@@ -63,10 +67,10 @@ int main(int argc, char** argv) {
     const int numItems = WEIGHTS.size() - 1;
     const int numThreads = std::stoi(argv[1]);
     const int knapsackCapacity = std::stoi(argv[2]);
-    
+
     const bool printAsRow = getenv("CPPMEMO_PRINT_AS_ROW") != nullptr;
 
-    cppmemo::CppMemo<Key, int, KeyHash1, KeyHash2> cppMemo(numThreads, numItems * knapsackCapacity);
+    CppMemoType cppMemo(numThreads, numItems * knapsackCapacity);
     int maxValue;
 
     const Timestamp start = now();

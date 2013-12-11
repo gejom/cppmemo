@@ -59,7 +59,6 @@
 #include <unordered_set> // std::unordered_set
 #include <random> // std::minstd_rand
 #include <thread> // std::thread
-#include <functional> // std::function
 #include <algorithm> // std::shuffle
 #include <cstddef> // std::nullptr_t
 #include <stdexcept> // std::logic_error, std::runtime_error
@@ -111,8 +110,10 @@ class CppMemo {
     
 private:
     
+    typedef fcmm::Fcmm<Key, Value, KeyHash1, KeyHash2, KeyEqual> Values;
+    
     int defaultNumThreads;
-    fcmm::Fcmm<Key, Value, KeyHash1, KeyHash2, KeyEqual> values;
+    Values values;
     bool detectCircularDependencies;
     
     class ThreadItemsStack {
@@ -202,6 +203,71 @@ private:
         }
 
     };
+    
+public:
+    
+    class PrerequisitesProvider {
+        
+        friend class CppMemo<Key, Value, KeyHash1, KeyHash2, KeyEqual>;
+        
+    private:
+        
+        enum Mode { NORMAL, DRY_RUN };
+        
+        const Values* values;
+        ThreadItemsStack* stack;
+        Mode mode;
+        Value dummyValue;
+        
+        PrerequisitesProvider(const Values* values, ThreadItemsStack* stack) :
+                values(values), stack(stack), mode(NORMAL), dummyValue() {
+        }
+        
+        void setMode(Mode mode) {
+            this->mode = mode;
+        }
+        
+    public:
+        
+        const Value& operator()(const Key& key) {
+            if (mode == NORMAL) {
+                return (*values)[key];
+            } else {
+                const auto findIt = values->find(key);
+                if (findIt == values->end()) {
+                    stack->push(key);
+                    return dummyValue; // return an invalid value
+                } else {
+                    return findIt->second; // return a valid value
+                }
+            }
+        }
+        
+    };
+    
+    class PrerequisitesDeclarer {
+        
+        friend class CppMemo<Key, Value, KeyHash1, KeyHash2, KeyEqual>;
+        
+    private:
+        
+        const Values* values;
+        ThreadItemsStack* stack;
+        
+        PrerequisitesDeclarer(const Values* values, ThreadItemsStack* stack) : values(values), stack(stack) {
+        }
+        
+    public:
+        
+        void operator()(const Key& key) {
+            if (values->find(key) == values->end()) {
+                stack->push(key);
+            }
+        }
+        
+    };
+    
+private:
 
     template<typename Compute, typename DeclarePrerequisites>
     void run(int threadNo, const Key& key, Compute compute, DeclarePrerequisites declarePrerequisites,
@@ -211,19 +277,19 @@ private:
 
         stack.push(key);
         stack.finalizeGroup();
+        
+        PrerequisitesProvider prerequisitesProvider(&values, &stack);
+        PrerequisitesDeclarer prerequisitesDeclarer(&values, &stack);
 
         while (!stack.empty()) {
 
             typename ThreadItemsStack::Item& item = stack.back();
 
             if (item.ready) {
-
-                const auto prerequisites = [&](const Key& key) -> const Value& {
-                    return values[key];
-                };
-
+                
+                prerequisitesProvider.setMode(PrerequisitesProvider::NORMAL);
                 values.insert(item.key, [&](const Key& key) -> Value {
-                    return compute(key, prerequisites);
+                    return compute(key, prerequisitesProvider);
                 });
 
                 stack.pop();
@@ -240,26 +306,14 @@ private:
 
                         // execute the declarePrerequisites function to get prerequisites
 
-                        declarePrerequisites(itemKey, [&](const Key& prerequisite) {
-                            if (values.find(prerequisite) == values.end()) {
-                                stack.push(prerequisite);
-                            }
-                        });
+                        declarePrerequisites(itemKey, prerequisitesDeclarer);
 
                     } else {
 
                         // dry-run the compute function to capture prerequisites
 
-                        const Value dummy = Value();
-                        const Value itemValue = compute(itemKey, [&](const Key& prerequisite) -> const Value& {
-                            const auto findIt = values.find(prerequisite);
-                            if (findIt == values.end()) {
-                                stack.push(prerequisite);
-                                return dummy; // return an invalid value
-                            } else {
-                                return findIt->second; // return a valid value
-                            }
-                        });
+                        prerequisitesProvider.setMode(PrerequisitesProvider::DRY_RUN);
+                        const Value itemValue = compute(itemKey, prerequisitesProvider);
 
                         if (stack.getGroupSize() == 0) { // the computed value is valid
                             values.emplace(itemKey, itemValue);
@@ -319,9 +373,9 @@ private:
 public:
 
     CppMemo(int defaultNumThreads = 1, std::size_t estimatedNumEntries = 0, bool detectCircularDependencies = false) :
-            defaultNumThreads(defaultNumThreads),
             values(estimatedNumEntries),
             detectCircularDependencies(detectCircularDependencies) {
+        setDefaultNumThreads(defaultNumThreads);
     }
 
     int getDefaultNumThreads() const {
@@ -355,7 +409,7 @@ public:
 
     template<typename Compute>
     const Value& getValue(const Key& key, Compute compute, int numThreads) {
-        const auto dummyDeclarePrerequisites = [](const Key&, std::function<void(const Key&)>) {};
+        const auto dummyDeclarePrerequisites = [](const Key&, PrerequisitesDeclarer&) {};
         return getValue(key, compute, dummyDeclarePrerequisites, numThreads, false);
     }
 
