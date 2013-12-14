@@ -253,9 +253,7 @@ public:
  *                   it should have the same interface as
  *                   <a href="http://en.cppreference.com/w/cpp/utility/hash">std::hash<T></a>
  * @tparam KeyHash2  the type of another function object that calculates the hash of the key:
- *                   it should be <i>completely independent from KeyHash1</i>;
- *                   the default for this template parameter is only available for
- *                   <a href="http://en.cppreference.com/w/cpp/types/is_integral">integral types</a>.
+ *                   it should be <i>completely independent from KeyHash1</i>
  * @tparam KeyEqual  the type of the function object that checks the equality of the two keys;
  *                   it should have the same interface as
  *                   <a href="http://en.cppreference.com/w/cpp/utility/functional/equal_to">std::equal_to<T></a>
@@ -414,7 +412,7 @@ public:
          * If a `CppMemo::getValue()` overload was called that does not accept a
          * `DeclarePrerequisites` function, then this method may return an invalid, default-constructed value,
          * and "track" the request as an indirect means to gather prerequisites of a given key
-         * (via a dry run of the `Compute` funtion).
+         * (via a dry run of the `Compute` function).
          *
          * @see `CppMemo::getValue()`
          *
