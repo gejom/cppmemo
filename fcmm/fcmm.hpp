@@ -228,6 +228,9 @@ class Fcmm {
 
 public:
 
+    typedef Key key_type;
+    typedef Value mapped_type;
+    
     /**
      * @brief An entry of the map
      */
