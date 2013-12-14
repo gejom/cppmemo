@@ -30,9 +30,7 @@ struct Result {
     int bestSplit;
 };
 
-typedef CppMemo<Range, Result, cppmemo::PairHash1<Range>, cppmemo::PairHash2<Range> > CppMemoType;
-
-void declarePrerequisites(Range range, typename CppMemoType::PrerequisitesGatherer declare) {
+void declarePrerequisites(Range range, typename CppMemo<Range, Result>::PrerequisitesGatherer declare) {
     const int size = range.to() - range.from() + 1;
     for (int i = 0; i < size - 1; i++) {
         const int split = range.from() + i;
@@ -43,7 +41,7 @@ void declarePrerequisites(Range range, typename CppMemoType::PrerequisitesGather
 
 std::vector<Matrix> matrices;
 
-Result calculate(Range range, typename CppMemoType::PrerequisitesProvider prereqs) {
+Result calculate(Range range, typename CppMemo<Range, Result>::PrerequisitesProvider prereqs) {
 
     const int size = range.to() - range.from() + 1;
 
@@ -71,7 +69,7 @@ Result calculate(Range range, typename CppMemoType::PrerequisitesProvider prereq
 
 }
 
-std::string parenthesize(const Range& range, const CppMemoType& cppMemo) {
+std::string parenthesize(const Range& range, const CppMemo<Range, Result>& cppMemo) {
 
     const int size = range.to() - range.from() + 1;
 
@@ -123,7 +121,7 @@ int main(int argc, char** argv) {
         std::cout << std::endl;
     }
 
-    CppMemoType cppMemo(numThreads, numMatrices * numMatrices);
+    CppMemo<Range, Result> cppMemo(numThreads, numMatrices * numMatrices);
 
     const Range fullRange { 0, (int) matrices.size() - 1 };
     Result result;

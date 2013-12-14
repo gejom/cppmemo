@@ -67,35 +67,136 @@
 
 namespace cppmemo {
 
-template<typename PairType>
-class AbstractPairHash {
-protected:
-    std::hash<typename PairType::first_type> hash1;
-    std::hash<typename PairType::second_type> hash2;
+/**
+ * @brief This namespace contains declarations that are of no interest for clients,
+ * such as obscure template tricks to provide the default hash functions.
+ */
+namespace pvt {
+
+template<typename T>
+struct VoidIfTypeExists {
+    typedef void type;
 };
 
-template<typename PairType>
-class PairHash1 : public AbstractPairHash<PairType> {
+template<typename T, typename Enable = void>
+struct IsPair {
+    static constexpr bool value = false;
+};
+
+template<typename T>
+struct IsPair<T,
+              typename std::enable_if<
+                  std::is_base_of<std::pair<typename T::first_type, typename T::second_type>, T>::value
+              >::type> {
+    static constexpr bool value = true;
+};
+
+template<typename T, typename Enable = void>
+struct IsHashable {
+    static constexpr bool value = false;
+};
+
+template<typename T>
+struct IsHashable<T, typename VoidIfTypeExists<typename std::hash<T>::argument_type>::type> {
+    static constexpr bool value = true;    
+};
+
+template<typename Pair, typename Enable = void>
+struct IsHashablePair {
+    static constexpr bool value = false;
+};
+
+template<typename Pair>
+struct IsHashablePair<Pair, typename std::enable_if<IsPair<Pair>::value>::type> {
+    static constexpr bool value = IsHashable<typename Pair::first_type>::value &&
+                                  IsHashable<typename Pair::second_type>::value;
+};
+
+template<typename Pair, typename Enable = void>
+struct IsIntegralPair {
+    static constexpr bool value = false;
+};
+
+template<typename Pair>
+struct IsIntegralPair<Pair, typename std::enable_if<IsPair<Pair>::value>::type> {
+    static constexpr bool value = std::is_integral<typename Pair::first_type>::value &&
+                                  std::is_integral<typename Pair::second_type>::value;
+};
+
+static const std::size_t FNV_OFFSET_BASIS = 2166136261;
+static const std::size_t FNV_PRIME = 16777619;
+
+template<typename T1, typename T2>
+std::size_t fnv1Hash(const T1& hash1, const T2& hash2) {
+    std::size_t hash = FNV_OFFSET_BASIS;
+    hash = (hash * FNV_PRIME) ^ hash1;
+    hash = (hash * FNV_PRIME) ^ hash2;
+    return hash;
+}
+
+template<typename Pair>
+class PairHash1 {
+private:
+    std::hash<typename Pair::first_type> hash1;
+    std::hash<typename Pair::second_type> hash2;
 public:
-    std::size_t operator()(const PairType& key) const {
-        // FNV hash
-        std::size_t hash = 2166136261;
-        hash = (hash * 16777619) ^ this->hash1(key.first);
-        hash = (hash * 16777619) ^ this->hash2(key.second);
-        return hash;
+    std::size_t operator()(const Pair& pair) const {
+        return pvt::fnv1Hash(hash1(pair.first), hash2(pair.second));
     }
 };
 
-template<typename PairType>
-class PairHash2 : public AbstractPairHash<PairType> {
+template<typename Pair>
+class PairHash2 {
+private:
+    fcmm::DefaultKeyHash2<typename Pair::first_type> hash1;
+    fcmm::DefaultKeyHash2<typename Pair::second_type> hash2;
 public:
-    std::size_t operator()(const PairType& key) const {
-        // FNV hash
-        std::size_t hash = 2166136261;
-        hash = (hash * 16777619) ^ ~this->hash1(key.first);
-        hash = (hash * 16777619) ^ ~this->hash2(key.second);
-        return hash;
+    std::size_t operator()(const Pair& pair) const {
+        return pvt::fnv1Hash(hash1(pair.first), hash2(pair.second));
     }
+};
+
+}
+
+/**
+ * @brief This hash function is the default for the `KeyHash1` template parameter of @link CppMemo @endlink.
+ *
+ * It is only available if:
+ *   - a `std::hash<T>` specialization for `T = Key` exists or
+ *   - `Key` is a subclass of `std::pair<T1, T2>` where `std::hash<T>` specializations exists
+ *     for both `T = T1` and `T = T2`.
+ */
+template<typename Key, typename Enable = void>
+class DefaultKeyHash1;
+
+template<typename Key>
+class DefaultKeyHash1<Key, typename std::enable_if<pvt::IsHashable<Key>::value>::type> :
+        public std::hash<Key> {
+};
+
+template<typename Key>
+class DefaultKeyHash1<Key, typename std::enable_if<pvt::IsHashablePair<Key>::value>::type> :
+        public pvt::PairHash1<Key> {
+};
+
+/**
+ * @brief This hash function is the default for the `KeyHash2` template parameter of @link CppMemo @endlink.
+ *
+ * It is only available if:
+ *   - `T` is an <a href="http://en.cppreference.com/w/cpp/types/is_integral">integral type</a>
+ *   - `Key` is a subclass of `std::pair<T1, T2>` where both `T1` and `T2` are integral types.
+ */
+template<typename Key, typename Enable = void>
+class DefaultKeyHash2;
+
+template<typename Key>
+class DefaultKeyHash2<Key, typename std::enable_if<std::is_integral<Key>::value>::type> :
+        public fcmm::DefaultKeyHash2<Key> {
+};
+
+template<typename Key>
+class DefaultKeyHash2<Key, typename std::enable_if<pvt::IsIntegralPair<Key>::value>::type> :
+        public pvt::PairHash2<Key> {
 };
 
 
@@ -162,11 +263,19 @@ public:
 template<
     typename Key,
     typename Value,
-    typename KeyHash1 = std::hash<Key>,
-    typename KeyHash2 = fcmm::SecondHashFunction<Key>,
+    typename KeyHash1 = DefaultKeyHash1<Key>,
+    typename KeyHash2 = DefaultKeyHash2<Key>,
     typename KeyEqual = std::equal_to<Key>
 >
 class CppMemo {
+    
+public:
+    
+    typedef Key key_type;
+    typedef Value value_type;
+    typedef KeyHash1 keyHash1_type;
+    typedef KeyHash2 keyHash2_type;
+    typedef KeyEqual keyEqual_type;
     
 private:
     

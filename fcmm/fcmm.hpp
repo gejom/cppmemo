@@ -180,8 +180,11 @@ struct Stats {
  * @brief This hash function is the default for the `KeyHash2` template parameter of @link Fcmm @endlink.
  * It is only available for <a href="http://en.cppreference.com/w/cpp/types/is_integral">integral types</a>.
  */
-template<typename Key, typename Enable = typename std::enable_if<std::is_integral<Key>::value, Key>::type>
-class SecondHashFunction {
+template<typename Key, typename Enable = void>
+class DefaultKeyHash2;
+
+template<typename Key>
+class DefaultKeyHash2<Key, typename std::enable_if<std::is_integral<Key>::value>::type> {
 private:
     std::hash<Key> hash;
 public:
@@ -218,7 +221,7 @@ template<
     typename Key,
     typename Value,
     typename KeyHash1 = std::hash<Key>,
-    typename KeyHash2 = SecondHashFunction<Key>,
+    typename KeyHash2 = DefaultKeyHash2<Key>,
     typename KeyEqual = std::equal_to<Key>
 >
 class Fcmm {

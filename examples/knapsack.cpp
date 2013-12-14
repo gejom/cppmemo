@@ -34,9 +34,7 @@ public:
     }
 };
 
-typedef CppMemo<Key, int, cppmemo::PairHash1<Key>, cppmemo::PairHash2<Key> > CppMemoType;
-
-int knapsack(const Key& key, typename CppMemoType::PrerequisitesProvider prereqs) {
+int knapsack(const Key& key, typename CppMemo<Key, int>::PrerequisitesProvider prereqs) {
     if (key.items() == 0) return 0;
     if (WEIGHTS[key.items()] > key.weight()) {
         return prereqs({ key.items() - 1, key.weight() });
@@ -60,7 +58,7 @@ int main(int argc, char** argv) {
 
     const bool printAsRow = getenv("CPPMEMO_PRINT_AS_ROW") != nullptr;
 
-    CppMemoType cppMemo(numThreads, numItems * knapsackCapacity);
+    CppMemo<Key, int> cppMemo(numThreads, numItems * knapsackCapacity);
     int maxValue;
 
     const Timestamp start = now();
