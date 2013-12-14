@@ -6,27 +6,17 @@
 
 using namespace cppmemo;
 
-struct Range { 
-    int from;
-    int to;
-    bool operator==(const Range& other) const {
-        return other.from == from && other.to == to;
+class Range : public std::pair<int, int> { 
+public:
+    int from() const {
+        return first;
     }
-};
-
-struct RangeHash1 {
-    std::size_t operator()(const Range& range) const {
-        // FNV hash
-        std::size_t hash = 2166136261;
-        hash = (hash * 16777619) ^ range.from;
-        hash = (hash * 16777619) ^ range.to;
-        return hash;
+    int to() const {
+        return second;
     }
-};
-
-struct RangeHash2 {
-    std::size_t operator()(const Range& range) const {
-        return range.from ^ range.to;
+    Range(int from, int to) : std::pair<int, int>(from, to) {
+    }
+    Range() {
     }
 };
 
@@ -40,14 +30,14 @@ struct Result {
     int bestSplit;
 };
 
-typedef CppMemo<Range, Result, RangeHash1, RangeHash2> CppMemoType;
+typedef CppMemo<Range, Result, cppmemo::PairHash1<Range>, cppmemo::PairHash2<Range> > CppMemoType;
 
 void declarePrerequisites(Range range, typename CppMemoType::PrerequisitesGatherer declare) {
-    const int size = range.to - range.from + 1;
+    const int size = range.to() - range.from() + 1;
     for (int i = 0; i < size - 1; i++) {
-        const int split = range.from + i;
-        declare({ range.from, split });
-        declare({ split + 1, range.to });
+        const int split = range.from() + i;
+        declare({ range.from(), split });
+        declare({ split + 1, range.to() });
     }
 }
 
@@ -55,20 +45,20 @@ std::vector<Matrix> matrices;
 
 Result calculate(Range range, typename CppMemoType::PrerequisitesProvider prereqs) {
 
-    const int size = range.to - range.from + 1;
+    const int size = range.to() - range.from() + 1;
 
-    if (size == 1) return { 0, range.from };
+    if (size == 1) return { 0, range.from() };
 
     int lowestCost = std::numeric_limits<int>::max();
     int bestSplit = 0;
 
     for (int i = 0; i < size - 1; i++) {
-        const int split = range.from + i;
-        const Range subrange1 { range.from, split };
-        const Range subrange2 { split + 1, range.to };
-        const Matrix& first = matrices[subrange1.from];
-        const Matrix& middle = matrices[subrange1.to];
-        const Matrix& last = matrices[subrange2.to];
+        const int split = range.from() + i;
+        const Range subrange1 { range.from(), split };
+        const Range subrange2 { split + 1, range.to() };
+        const Matrix& first = matrices[subrange1.from()];
+        const Matrix& middle = matrices[subrange1.to()];
+        const Matrix& last = matrices[subrange2.to()];
         const int cost = prereqs(subrange1).lowestCost + prereqs(subrange2).lowestCost +
                 (first.p * middle.q * last.q);
         if (cost < lowestCost) {
@@ -83,14 +73,14 @@ Result calculate(Range range, typename CppMemoType::PrerequisitesProvider prereq
 
 std::string parenthesize(const Range& range, const CppMemoType& cppMemo) {
 
-    const int size = range.to - range.from + 1;
+    const int size = range.to() - range.from() + 1;
 
-    if (size == 1) return "A" + std::to_string(range.from) + " ";
+    if (size == 1) return "A" + std::to_string(range.from()) + " ";
 
     const int bestSplit = cppMemo(range).bestSplit;
 
-    const Range left { range.from, bestSplit };
-    const Range right { bestSplit + 1, range.to };
+    const Range left { range.from(), bestSplit };
+    const Range right { bestSplit + 1, range.to() };
 
     return "( " + parenthesize(left, cppMemo) + parenthesize(right, cppMemo) + ") ";
 

@@ -67,6 +67,38 @@
 
 namespace cppmemo {
 
+template<typename PairType>
+class AbstractPairHash {
+protected:
+    std::hash<typename PairType::first_type> hash1;
+    std::hash<typename PairType::second_type> hash2;
+};
+
+template<typename PairType>
+class PairHash1 : public AbstractPairHash<PairType> {
+public:
+    std::size_t operator()(const PairType& key) const {
+        // FNV hash
+        std::size_t hash = 2166136261;
+        hash = (hash * 16777619) ^ this->hash1(key.first);
+        hash = (hash * 16777619) ^ this->hash2(key.second);
+        return hash;
+    }
+};
+
+template<typename PairType>
+class PairHash2 : public AbstractPairHash<PairType> {
+public:
+    std::size_t operator()(const PairType& key) const {
+        // FNV hash
+        std::size_t hash = 2166136261;
+        hash = (hash * 16777619) ^ ~this->hash1(key.first);
+        hash = (hash * 16777619) ^ ~this->hash2(key.second);
+        return hash;
+    }
+};
+
+
 /**
  * @brief This exception is thrown when a circular dependency among the keys is detected.
  *

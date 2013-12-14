@@ -20,39 +20,29 @@ static const std::vector<int> VALUES = {0, // 0-th element is never used
         372, 34, 23, 102, 324, 31, 87, 23, 12, 87,
         12, 54, 123, 45, 12, 78, 231, 32, 12, 99};
 
-struct Key {
-    int items;
-    int weight;
-    bool operator==(const Key& other) const {
-        return other.items == items && other.weight == weight;
+class Key : public std::pair<int, int> {
+public:
+    int items() const {
+        return first;
+    }
+    int weight() const {
+        return second;
+    }
+    Key(int items, int weight) : std::pair<int, int>(items, weight) {
+    }
+    Key() {
     }
 };
 
-struct KeyHash1 {
-    std::size_t operator()(const Key& key) const {
-        // FNV hash
-        std::size_t hash = 2166136261;
-        hash = (hash * 16777619) ^ key.items;
-        hash = (hash * 16777619) ^ key.weight;
-        return hash;
-    }
-};
-
-struct KeyHash2 {
-    std::size_t operator()(const Key& key) const {
-        return key.items ^ key.weight;
-    }
-};
-
-typedef CppMemo<Key, int, KeyHash1, KeyHash2> CppMemoType;
+typedef CppMemo<Key, int, cppmemo::PairHash1<Key>, cppmemo::PairHash2<Key> > CppMemoType;
 
 int knapsack(const Key& key, typename CppMemoType::PrerequisitesProvider prereqs) {
-    if (key.items == 0) return 0;
-    if (WEIGHTS[key.items] > key.weight) {
-        return prereqs({ key.items - 1, key.weight });
+    if (key.items() == 0) return 0;
+    if (WEIGHTS[key.items()] > key.weight()) {
+        return prereqs({ key.items() - 1, key.weight() });
     } else {
-        int val1 = prereqs({ key.items - 1, key.weight });
-        int val2 = prereqs({ key.items - 1, key.weight - WEIGHTS[key.items] }) + VALUES[key.items];
+        int val1 = prereqs({ key.items() - 1, key.weight() });
+        int val2 = prereqs({ key.items() - 1, key.weight() - WEIGHTS[key.items()] }) + VALUES[key.items()];
         return std::max(val1, val2);
     }
 }
