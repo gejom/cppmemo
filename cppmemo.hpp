@@ -131,7 +131,7 @@ template<
     typename Key,
     typename Value,
     typename KeyHash1 = std::hash<Key>,
-    typename KeyHash2 = fcmm::SecondHashFunction<Key>,
+    typename KeyHash2 = fcmm::DefaultKeyHash2<Key>,
     typename KeyEqual = std::equal_to<Key>
 >
 class CppMemo {
