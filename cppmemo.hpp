@@ -38,7 +38,7 @@
  *
  * @section DESCRIPTION
  *
- * This header file contains a generic framework for memoization (see
+ * This header file isMemoized a generic framework for memoization (see
  * http://en.wikipedia.org/wiki/Memoization) supporting parallel
  * execution.
  *
@@ -78,7 +78,7 @@ namespace cppmemo {
 template<typename Key>
 class CircularDependencyException : public std::exception {
     
-    template<typename K, typename V, typename KH1, typename KH2, typename KE>
+    template<typename K, typename V, typename KH1, typename KH2, typename KE, typename C>
     friend class CppMemo;
     
 private:
@@ -109,39 +109,108 @@ public:
 };
 
 /**
+ * @brief Default implementation of the `MemoizationContainer` concept. At the moment,
+ * this class is just an adapter for
+ * <a href="http://projects.giacomodrago.com/fcmm/doc/api/classfcmm_1_1Fcmm.html">`fcmm::Fcmm`</a>.
+ */
+template<typename Key, typename Value, typename KeyHash1, typename KeyHash2, typename KeyEqual>
+class FcmmAdapter {
+    
+private:
+    
+    typedef fcmm::Fcmm<Key, Value, KeyHash1, KeyHash2, KeyEqual> FcmmType;
+    FcmmType map;
+    
+public:
+    
+    FcmmAdapter(std::size_t initialCapacity) : map(initialCapacity) {
+    }
+    
+    bool isMemoized(const Key& key) const {
+        return map.find(key) != map.end();
+    }
+    
+    const Value& retrieve(const Key& key) const {
+        return map.at(key);
+    }
+    
+    void memoize(const Key& key, const Value& value) {
+        map.emplace(key, value);
+    }
+    
+    template<typename ComputeValueFunction>
+    void memoize(const Key& key, ComputeValueFunction computeValueFunction) {
+        map.insert(key, computeValueFunction);
+    }
+    
+};
+
+/**
  * @brief This class implements a generic framework for memoization supporting
  * automatic parallel execution.
  * 
  * Please read the documentation on the project website: http://projects.giacomodrago.com/c++memo
  *
- * @tparam Key       the type of the key (default-constructible and copy-constructible)
- * @tparam Value     the type of the value (default-constructible and copy-constructible)
- * @tparam KeyHash1  the type of a function object that calculates the hash of the key;
- *                   it should have the same interface as
- *                   <a href="http://en.cppreference.com/w/cpp/utility/hash">std::hash<T></a>
- * @tparam KeyHash2  the type of another function object that calculates the hash of the key:
- *                   it should be <i>completely independent from KeyHash1</i>;
- *                   the default for this template parameter is only available for
- *                   <a href="http://en.cppreference.com/w/cpp/types/is_integral">integral types</a>.
- * @tparam KeyEqual  the type of the function object that checks the equality of the two keys;
- *                   it should have the same interface as
- *                   <a href="http://en.cppreference.com/w/cpp/utility/functional/equal_to">std::equal_to<T></a>
+ * Description of the `MemoizationContainer` concept:
+ * @code
+ *    class MemoizationContainer {
+ *
+ *        MemoizationContainer(std::size_t initialCapacity) {
+ *            // constructor (it may use initialCapacity, if needed)
+ *        }
+ *
+ *        bool isMemoized(const Key& key) const {
+ *            // return true if the value corresponding to the key is memoized
+ *        }
+ *
+ *        const Value& retrieve(const Key& key) const {
+ *            // return the memoized value corresponding to the key
+ *        }
+ *
+ *        void memoize(const Key& key, const Value& value) {
+ *            // memoize the value corresponding to the key
+ *        }
+ *
+ *        template<typename ComputeValueFunction>
+ *        void memoize(const Key& key, ComputeValueFunction computeValueFunction) {
+ *            // memoize the value corresponding to the key
+ *            // the value can be calculated by calling computeValueFunction(key)
+ *        }
+ *
+ *    }
+ * @endcode
+ *
+ * @tparam Key        the type of the key (default-constructible and copy-constructible)
+ * @tparam Value      the type of the value (default-constructible and copy-constructible)
+ * @tparam KeyHash1   the type of a function object that calculates the hash of the key;
+ *                    the default is
+ *                    <a href="http://en.cppreference.com/w/cpp/utility/hash">`std::hash<Key>`</a>
+ * @tparam KeyHash2   the type of another function object that calculates the hash of the key:
+ *                    it should be <i>completely independent from `KeyHash1`</i>;
+ *                    the default is
+ *                    <a href="http://projects.giacomodrago.com/fcmm/doc/api/classfcmm_1_1DefaultKeyHash2.html">`fcmm::DefaultKeyHash2<Key>`</a>
+ *                    and is only available for
+ *                    <a href="http://en.cppreference.com/w/cpp/types/is_integral">integral types</a>
+ * @tparam KeyEqual   the type of the function object that checks the equality of the two keys;
+ *                    the default for this template parameter is
+ *                    <a href="http://en.cppreference.com/w/cpp/utility/functional/equal_to">`std::equal_to<Key>`</a>
+ * @tparam Container  the container to be used for retrieving/storing the memoized entries;
+ *                    it has to implement the `MemoizationContainer` concept
  */
 template<
     typename Key,
     typename Value,
-    typename KeyHash1 = std::hash<Key>,
-    typename KeyHash2 = fcmm::DefaultKeyHash2<Key>,
-    typename KeyEqual = std::equal_to<Key>
+    typename KeyHash1  = std::hash<Key>,
+    typename KeyHash2  = fcmm::DefaultKeyHash2<Key>,
+    typename KeyEqual  = std::equal_to<Key>,
+    typename Container = FcmmAdapter<Key, Value, KeyHash1, KeyHash2, KeyEqual>
 >
 class CppMemo {
     
 private:
     
-    typedef fcmm::Fcmm<Key, Value, KeyHash1, KeyHash2, KeyEqual> Values;
-    
     int defaultNumThreads;
-    Values values;
+    Container values;
     bool detectCircularDependencies;
     
     class ThreadItemsStack {
@@ -251,12 +320,12 @@ public:
 
         enum Mode { NORMAL, DRY_RUN };
 
-        const Values* values;
+        const Container* values;
         ThreadItemsStack* stack;
         Mode mode;
         Value dummyValue;
 
-        PrerequisitesProvider(const Values* values, ThreadItemsStack* stack) :
+        PrerequisitesProvider(const Container* values, ThreadItemsStack* stack) :
                 values(values), stack(stack), mode(NORMAL), dummyValue() {
         }
 
@@ -284,14 +353,13 @@ public:
          */
         const Value& operator()(const Key& key) {
             if (mode == NORMAL) {
-                return (*values)[key];
-            } else {
-                const auto findIt = values->find(key);
-                if (findIt == values->end()) {
+                return values->retrieve(key);
+            } else { // dry running
+                if (!values->isMemoized(key)) {
                     stack->push(key);
                     return dummyValue; // return an invalid value
                 } else {
-                    return findIt->second; // return a valid value
+                    return values->retrieve(key); // return a valid value
                 }
             }
         }
@@ -308,10 +376,10 @@ public:
 
     private:
 
-        const Values* values;
+        const Container* values;
         ThreadItemsStack* stack;
 
-        PrerequisitesGatherer(const Values* values, ThreadItemsStack* stack) : values(values), stack(stack) {
+        PrerequisitesGatherer(const Container* values, ThreadItemsStack* stack) : values(values), stack(stack) {
         }
 
     public:
@@ -322,7 +390,7 @@ public:
          * @param key a prerequisite key
          */
         void operator()(const Key& key) {
-            if (values->find(key) == values->end()) {
+            if (!values->isMemoized(key)) {
                 stack->push(key);
             }
         }
@@ -350,7 +418,7 @@ private:
             if (item.ready) {
 
                 prerequisitesProvider.setMode(PrerequisitesProvider::NORMAL);
-                values.insert(item.key, [&](const Key& key) -> Value {
+                values.memoize(item.key, [&](const Key& key) -> Value {
                     return compute(key, prerequisitesProvider);
                 });
 
@@ -362,7 +430,7 @@ private:
 
                 const Key itemKey = item.key; // copy item key
 
-                if (values.find(itemKey) == values.end()) {
+                if (!values.isMemoized(itemKey)) {
 
                     if (providedDeclarePrerequisites) {
 
@@ -378,7 +446,7 @@ private:
                         const Value itemValue = compute(itemKey, prerequisitesProvider);
 
                         if (stack.getGroupSize() == 0) { // the computed value is valid
-                            values.emplace(itemKey, itemValue);
+                            values.memoize(itemKey, itemValue);
                             stack.pop();
                         }
 
@@ -398,9 +466,8 @@ private:
     const Value& getValue(const Key& key, Compute compute, DeclarePrerequisites declarePrerequisites, int numThreads,
                           bool providedDeclarePrerequisites) {
 
-        const auto findIt = values.find(key);
-        if (findIt != values.end()) {
-            return findIt->second;
+        if (values.isMemoized(key)) {
+            return values.retrieve(key);
         }
 
         if (numThreads > 1) { // multi-thread execution
@@ -410,7 +477,7 @@ private:
 
             for (int threadNo = 0; threadNo < numThreads; threadNo++) {
 
-                typedef CppMemo<Key, Value, KeyHash1, KeyHash2, KeyEqual> self;
+                typedef CppMemo<Key, Value, KeyHash1, KeyHash2, KeyEqual, Container> self;
                 std::thread thread(&self::run<Compute, DeclarePrerequisites>,
                         this, threadNo, std::ref(key), compute, declarePrerequisites, providedDeclarePrerequisites);
 
@@ -428,7 +495,7 @@ private:
 
         }
 
-        return values[key];
+        return values.retrieve(key);
 
     }
 
@@ -573,9 +640,8 @@ public:
      * @throw std::logic_error thrown if no value for the requested key is memoized
      */
     const Value& getValue(const Key& key) const {
-        const auto findIt = values.find(key);
-        if (findIt != values.end()) {
-            return findIt->second;
+        if (values.isMemoized(key)) {
+            return values.retrieve(key);
         } else {
             throw std::logic_error("The value is not memoized");
         }
