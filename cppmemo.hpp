@@ -145,6 +145,9 @@ public:
     
 };
 
+template<typename Key>
+using DefaultKeyHash2 = fcmm::DefaultKeyHash2<Key>;
+
 /**
  * @brief This class implements a generic framework for memoization supporting
  * automatic parallel execution.
@@ -201,7 +204,7 @@ template<
     typename Key,
     typename Value,
     typename KeyHash1  = std::hash<Key>,
-    typename KeyHash2  = fcmm::DefaultKeyHash2<Key>,
+    typename KeyHash2  = DefaultKeyHash2<Key>,
     typename KeyEqual  = std::equal_to<Key>,
     typename Container = FcmmAdapter<Key, Value, KeyHash1, KeyHash2, KeyEqual>
 >
@@ -314,8 +317,8 @@ public:
      */
     class PrerequisitesProvider {
         
-        friend class CppMemo<Key, Value, KeyHash1, KeyHash2, KeyEqual>;
-        
+        friend class CppMemo<Key, Value, KeyHash1, KeyHash2, KeyEqual, Container>;
+
     private:
 
         enum Mode { NORMAL, DRY_RUN };
@@ -372,7 +375,7 @@ public:
      */
     class PrerequisitesGatherer {
 
-        friend class CppMemo<Key, Value, KeyHash1, KeyHash2, KeyEqual>;
+        friend class CppMemo<Key, Value, KeyHash1, KeyHash2, KeyEqual, Container>;
 
     private:
 
