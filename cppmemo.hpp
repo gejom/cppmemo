@@ -1,7 +1,7 @@
 /**
  * @file
  * @author  Giacomo Drago <giacomo@giacomodrago.com>
- * @version 0.9.5 beta
+ * @version 1.0-RC
  *
  *
  * @section LICENSE
