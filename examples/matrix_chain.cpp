@@ -42,7 +42,7 @@ struct Result {
 
 typedef CppMemo<Range, Result, RangeHash1, RangeHash2> CppMemoType;
 
-void declarePrerequisites(Range range, typename CppMemoType::PrerequisitesGatherer declare) {
+void declarePrerequisites(Range range, CppMemoType::PrerequisitesGatherer declare) {
     const int size = range.to - range.from + 1;
     for (int i = 0; i < size - 1; i++) {
         const int split = range.from + i;
@@ -53,7 +53,7 @@ void declarePrerequisites(Range range, typename CppMemoType::PrerequisitesGather
 
 std::vector<Matrix> matrices;
 
-Result calculate(Range range, typename CppMemoType::PrerequisitesProvider prereqs) {
+Result calculate(Range range, CppMemoType::PrerequisitesProvider prereqs) {
 
     const int size = range.to - range.from + 1;
 

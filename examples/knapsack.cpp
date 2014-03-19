@@ -46,7 +46,7 @@ struct KeyHash2 {
 
 typedef CppMemo<Key, int, KeyHash1, KeyHash2> CppMemoType;
 
-int knapsack(const Key& key, typename CppMemoType::PrerequisitesProvider prereqs) {
+int knapsack(const Key& key, CppMemoType::PrerequisitesProvider prereqs) {
     if (key.items == 0) return 0;
     if (WEIGHTS[key.items] > key.weight) {
         return prereqs({ key.items - 1, key.weight });

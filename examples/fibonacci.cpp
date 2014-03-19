@@ -4,7 +4,7 @@
 
 using namespace cppmemo;
 
-int fibonacci(int i, typename CppMemo<int, int>::PrerequisitesProvider prereqs) {
+int fibonacci(int i, CppMemo<int, int>::PrerequisitesProvider prereqs) {
     if (i == 0) return 0;
     if (i <= 2) return 1;
     return prereqs(i-1) + prereqs(i-2);

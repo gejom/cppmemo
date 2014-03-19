@@ -1,7 +1,7 @@
 /**
  * @file
  * @author  Giacomo Drago <giacomo@giacomodrago.com>
- * @version 1.0 RC
+ * @version 1.0
  *
  *
  * @section LICENSE
@@ -90,7 +90,8 @@ static const float FIRST_SUBMAP_CAPACITY_MULTIPLIER = 1.03f;
  *
  * Adapted from http://stackoverflow.com/a/5694432/671092
  */
-static bool isPrime(std::size_t n) noexcept {
+template<typename T>
+static bool isPrime(const T& n, typename std::enable_if<std::is_integral<T>::value>::type* = nullptr) {
 
     std::size_t divisor = 3;
     while (1) {
@@ -111,7 +112,8 @@ static bool isPrime(std::size_t n) noexcept {
  *
  * Adapted from http://stackoverflow.com/a/5694432/671092
  */
-static std::size_t nextPrime(std::size_t n) noexcept {
+template<typename T>
+static T nextPrime(T n, typename std::enable_if<std::is_integral<T>::value>::type* = nullptr) {
 
     if (n <= 2)
         return 2;
@@ -206,16 +208,18 @@ public:
  *
  * Due to its features, this data structure is fit to be used for memoization in concurrent environments.
  *
- * @tparam  Key         the type of the key in each entry (default-constructible and copy-constructible)
- * @tparam  Value       the type of the value in each entry (default-constructible and copy-constructible)
+ * @tparam  Key         the type of the key in each entry (default-constructible, copy-constructible or
+ *                      move-constructible, copy-assignable or move-assignable)
+ * @tparam  Value       the type of the value in each entry (default-constructible, copy-constructible or
+ *                      move-constructible, copy-assignable or move-assignable)
  * @tparam  KeyHash1    the type of a function object that calculates the hash of the key;
  *                      it should have the same interface as
- *                      <a href="http://en.cppreference.com/w/cpp/utility/hash">std::hash<T></a>
+ *                      <a href="http://en.cppreference.com/w/cpp/utility/hash">`std::hash<T>`</a>
  * @tparam  KeyHash2    the type of another function object that calculates the hash of the key;
- *                      it should be <i>completely independent from KeyHash1</i>
+ *                      it should be <b>completely independent from `KeyHash1`</b>
  * @tparam  KeyEqual    the type of the function object that checks the equality of the two keys;
  *                      it should have the same interface as
- *                      <a href="http://en.cppreference.com/w/cpp/utility/functional/equal_to">std::equal_to<T></a>
+ *                      <a href="http://en.cppreference.com/w/cpp/utility/functional/equal_to">`std::equal_to<T>`</a>
  */
 template<
     typename Key,
@@ -226,11 +230,31 @@ template<
 >
 class Fcmm {
 
+    static_assert(std::is_default_constructible<Key>::value, "Key has to be default-constructible");
+    static_assert(std::is_default_constructible<Value>::value, "Value has to be default-constructible");
+
+    static_assert(std::is_copy_constructible<Key>::value || std::is_move_constructible<Key>::value,
+                  "Key has to be copy-constructible or move-constructible, or both");
+    static_assert(std::is_copy_constructible<Value>::value || std::is_move_constructible<Value>::value,
+                  "Value has to be copy-constructible or move-constructible, or both");
+
+    static_assert(std::is_copy_assignable<Key>::value || std::is_move_assignable<Key>::value,
+                  "Key has to be copy-assignable or move-assignable, or both");
+    static_assert(std::is_copy_assignable<Value>::value || std::is_move_assignable<Value>::value,
+                  "Value has to be copy-assignable or move-assignable, or both");
+
 public:
 
+    /**
+     * @brief The type of the key in each entry
+     */
     typedef Key key_type;
+
+    /**
+     * @brief The type of the value in each entry
+     */
     typedef Value mapped_type;
-    
+
     /**
      * @brief An entry of the map
      */
@@ -441,6 +465,7 @@ private:
 
         /**
          * @brief Inserts a new entry into the submap, if the submap doesn't already contain an entry with the same key.
+         * The key will be moved, if possible.
          *
          * The value is calculated as needed by calling the `computeValue` function or functor.
          *
@@ -457,8 +482,8 @@ private:
          * @throw FullSubmapException    thrown if the new entry could not be inserted because the submap is full
          *
          */
-        template<typename ComputeValueFunction>
-        std::pair<std::size_t, bool> insert(const Key& key, std::size_t hash1, std::size_t hash2, ComputeValueFunction computeValue) {
+        template<typename KeyType, typename ComputeValueFunction>
+        std::pair<std::size_t, bool> insert(KeyType&& key, std::size_t hash1, std::size_t hash2, ComputeValueFunction computeValue) {
 
             Value value = Value(); // to avoid "maybe-uninitialized" warnings
             bool valueComputed = false;
@@ -487,8 +512,8 @@ private:
 
                         // the bucket is now busy and this thread is the only one that can write on it
 
-                        bucket.entry.first = key;
-                        bucket.entry.second = value;
+                        bucket.entry.first = std::move(key);
+                        bucket.entry.second = std::move(value);
                         bucket.state.store(Bucket::State::VALID, std::memory_order_release); // mark the bucket as valid
 
                         incrementNumValidBuckets();
@@ -693,7 +718,7 @@ private:
     }
 
     /**
-     * @brief Inserts a new entry into the map.
+     * @brief Inserts a new entry into the map. The key will be moved, if possible.
      *
      * The value is calculated as needed by calling the `computeValue` function or functor.
      *
@@ -707,8 +732,8 @@ private:
      * @return                       a pair consisting of a @link const_iterator @endlink to the inserted entry (or to the entry
      *                               that prevented the insertion) and a `bool` denoting whether the insertion took place
      */
-    template<typename ComputeValueFunction>
-    std::pair<const_iterator, bool> insertHelper(const Key& key, std::size_t hash1, std::size_t hash2, ComputeValueFunction computeValue) {
+    template<typename KeyType, typename ComputeValueFunction>
+    std::pair<const_iterator, bool> insertHelper(KeyType&& key, std::size_t hash1, std::size_t hash2, ComputeValueFunction computeValue) {
 
         while (1) {
 
@@ -730,7 +755,8 @@ private:
             }
 
             try {
-                const std::pair<std::size_t, bool> insertResult = lastSubmap.insert(key, hash1, hash2, computeValue);
+                const std::pair<std::size_t, bool> insertResult =
+                        lastSubmap.insert(std::forward<KeyType>(key), hash1, hash2, computeValue);
                 if (insertResult.second) {
                     incrementNumEntries();
                 }
@@ -754,7 +780,7 @@ public:
      * @param maxLoadFactor        the maximum load factor of each submap:
      *                             it should be a floating point number in the open interval (0, 1)
      * @param maxNumSubmaps        the maximum number of submaps that can be created (at least 1):
-     *                             if this limit is exceeded, a std::runtime_error is thrown
+     *                             if this limit is exceeded, a `std::runtime_error` is thrown
      */
     Fcmm(std::size_t estimatedNumEntries = 0,
          float maxLoadFactor = DEFAULT_MAX_LOAD_FACTOR,
@@ -776,7 +802,7 @@ public:
         // calculate the capacity of the first submap
         const std::size_t firstSubmapCapacity = std::max(
                     FIRST_SUBMAP_MIN_CAPACITY,
-                    nextPrime(FIRST_SUBMAP_CAPACITY_MULTIPLIER * estimatedNumEntries / maxLoadFactor));
+                    nextPrime((std::size_t) (FIRST_SUBMAP_CAPACITY_MULTIPLIER * estimatedNumEntries / maxLoadFactor)));
 
         // create the first submap
         getSubmap(0).reset(new Submap(firstSubmapCapacity, maxLoadFactor));
@@ -811,7 +837,7 @@ public:
     }
 
     /**
-     * @brief Returns a const reference to the value of an entry with key equal to `key`.
+     * @brief Returns a const reference to the value of an entry having key equal to `key`.
      * If no such entry exists, an exception of type `std::out_of_range` is thrown.
      *
      * @param key                the key of the entry to be found
@@ -840,6 +866,24 @@ public:
     }
 
     /**
+     * @brief Inserts a new entry into the map. The key will be moved, if possible.
+     *
+     * The value is calculated as needed by calling the `computeValue` function or functor.
+     *
+     * @param key                    the key of the entry to be inserted
+     * @param computeValue           a function or functor that, given the key, calculates the corresponding value
+     *
+     * @tparam ComputeValueFunction  function or functor implementing `Value operator()(const Key&)`
+     *
+     * @return                       a pair consisting of a @link const_iterator @endlink to the inserted entry (or to the entry
+     *                               that prevented the insertion) and a `bool` denoting whether the insertion took place
+     */
+    template<typename ComputeValueFunction>
+    std::pair<const_iterator, bool> insert(Key&& key, ComputeValueFunction computeValue) {
+        return insertHelper(key, keyHash1(key), keyHash2(key), computeValue);
+    }
+
+    /**
      * @brief Inserts a new entry into the map.
      *
      * @param entry  the entry to be inserted
@@ -850,7 +894,21 @@ public:
      * @see insert(const Key&, ComputeValueFunction)
      */
     std::pair<const_iterator, bool> insert(const Entry& entry) {
-        return insert(entry.first, [&entry](const Key&) { return entry.second; });
+        return insert(entry.first, [&entry](const Key&) -> const Value& { return entry.second; });
+    }
+
+    /**
+     * @brief Inserts a new entry into the map. The members of the entry will be moved, if possible.
+     *
+     * @param entry  the entry to be inserted
+     *
+     * @return       a pair consisting of a @link const_iterator @endlink to the inserted entry (or to the entry
+     *               that prevented the insertion) and a `bool` denoting whether the insertion took place
+     *
+     * @see insert(const Key&, ComputeValueFunction)
+     */
+    std::pair<const_iterator, bool> insert(Entry&& entry) {
+        return insert(std::move(entry.first), [&entry](const Key&) -> Value&& { return std::move(entry.second); });
     }
 
     /**
@@ -866,7 +924,7 @@ public:
      */
     template<typename... Args>
     std::pair<const_iterator, bool> emplace(Args&&... args) {
-        return insert(std::make_pair(std::forward<Args>(args)...));
+        return insert(Entry(std::forward<Args>(args)...));
     }
 
     /**
@@ -985,7 +1043,7 @@ public:
      * @brief A const <a href="http://en.cppreference.com/w/cpp/concept/InputIterator">input iterator</a>
      * for iterating over the map. Iterators are never invalidated.
      */
-    class const_iterator : std::input_iterator_tag {
+    class const_iterator : public std::iterator<std::input_iterator_tag, const Entry> {
 
         friend class Fcmm;
 
@@ -1138,6 +1196,16 @@ public:
          */
         const Entry* operator->() const {
             return &getEntry();
+        }
+
+        /**
+         * @brief Swap function
+         */
+        friend void swap(const_iterator& it1, const_iterator& it2) {
+            std::swap(it1.map, it2.map);
+            std::swap(it1.submapIndex, it2.submapIndex);
+            std::swap(it1.bucketIndex, it2.bucketIndex);
+            std::swap(it1.end, it2.end);
         }
 
     };

@@ -251,12 +251,12 @@ public:
 
         enum Mode { NORMAL, DRY_RUN };
 
-        const Values* values;
-        ThreadItemsStack* stack;
+        const Values& values;
+        ThreadItemsStack& stack;
         Mode mode;
         Value dummyValue;
 
-        PrerequisitesProvider(const Values* values, ThreadItemsStack* stack) :
+        PrerequisitesProvider(const Values& values, ThreadItemsStack& stack) :
                 values(values), stack(stack), mode(NORMAL), dummyValue() {
         }
 
@@ -284,11 +284,11 @@ public:
          */
         const Value& operator()(const Key& key) {
             if (mode == NORMAL) {
-                return (*values)[key];
-            } else {
-                const auto findIt = values->find(key);
-                if (findIt == values->end()) {
-                    stack->push(key);
+                return values[key];
+            } else { // dry running
+                const auto findIt = values.find(key);
+                if (findIt == values.end()) {
+                    stack.push(key);
                     return dummyValue; // return an invalid value
                 } else {
                     return findIt->second; // return a valid value
@@ -308,10 +308,10 @@ public:
 
     private:
 
-        const Values* values;
-        ThreadItemsStack* stack;
+        const Values& values;
+        ThreadItemsStack& stack;
 
-        PrerequisitesGatherer(const Values* values, ThreadItemsStack* stack) : values(values), stack(stack) {
+        PrerequisitesGatherer(const Values& values, ThreadItemsStack& stack) : values(values), stack(stack) {
         }
 
     public:
@@ -322,8 +322,8 @@ public:
          * @param key a prerequisite key
          */
         void operator()(const Key& key) {
-            if (values->find(key) == values->end()) {
-                stack->push(key);
+            if (values.find(key) == values.end()) {
+                stack.push(key);
             }
         }
 
@@ -340,8 +340,8 @@ private:
         stack.push(key);
         stack.finalizeGroup();
 
-        PrerequisitesProvider prerequisitesProvider(&values, &stack);
-        PrerequisitesGatherer prerequisitesDeclarer(&values, &stack);
+        PrerequisitesProvider prerequisitesProvider(values, stack);
+        PrerequisitesGatherer prerequisitesDeclarer(values, stack);
 
         while (!stack.empty()) {
 
@@ -489,8 +489,8 @@ public:
      * @param declarePrerequisites   a function or functor used to gather the prerequisites of a given key
      * @param numThreads             the number of threads to be started
      *
-     * @tparam Compute               function or functor implementing `Value operator()(const Key&, typename CppMemo<Key, Value, KeyHash1, KeyHash2, KeyEqual>::PrerequisitesProvider)`
-     * @tparam DeclarePrerequisites  function or functor implementing `void operator()(const Key&, typename CppMemo<Key, Value, KeyHash1, KeyHash2, KeyEqual>::PrerequisitesGatherer)`
+     * @tparam Compute               function or functor implementing `Value operator()(const Key&, CppMemo<Key, Value, KeyHash1, KeyHash2, KeyEqual>::PrerequisitesProvider)`
+     * @tparam DeclarePrerequisites  function or functor implementing `void operator()(const Key&, CppMemo<Key, Value, KeyHash1, KeyHash2, KeyEqual>::PrerequisitesGatherer)`
      *
      * @return the value corresponding to the requested key
      */
@@ -508,8 +508,8 @@ public:
      * @param compute                a function or functor used to compute the value corresponding to a given key
      * @param declarePrerequisites   a function or functor used to gather the prerequisites of a given key
      *
-     * @tparam Compute               function or functor implementing `Value operator()(const Key&, typename CppMemo<Key, Value, KeyHash1, KeyHash2, KeyEqual>::PrerequisitesProvider)`
-     * @tparam DeclarePrerequisites  function or functor implementing `void operator()(const Key&, typename CppMemo<Key, Value, KeyHash1, KeyHash2, KeyEqual>::PrerequisitesGatherer)`
+     * @tparam Compute               function or functor implementing `Value operator()(const Key&, CppMemo<Key, Value, KeyHash1, KeyHash2, KeyEqual>::PrerequisitesProvider)`
+     * @tparam DeclarePrerequisites  function or functor implementing `void operator()(const Key&, CppMemo<Key, Value, KeyHash1, KeyHash2, KeyEqual>::PrerequisitesGatherer)`
      *
      * @return the value corresponding to the requested key
      */
@@ -530,7 +530,7 @@ public:
      * @param compute                a function or functor used to compute the value corresponding to a given key
      * @param numThreads             the number of threads to be started
      *
-     * @tparam Compute               function or functor implementing `Value operator()(const Key&, typename CppMemo<Key, Value, KeyHash1, KeyHash2, KeyEqual>::PrerequisitesProvider)`
+     * @tparam Compute               function or functor implementing `Value operator()(const Key&, CppMemo<Key, Value, KeyHash1, KeyHash2, KeyEqual>::PrerequisitesProvider)`
      *
      * @return the value corresponding to the requested key
      */
@@ -553,7 +553,7 @@ public:
      * @param key                    the requested key
      * @param compute                a function or functor used to compute the value corresponding to a given key
      *
-     * @tparam Compute               function or functor implementing `Value operator()(const Key&, typename CppMemo<Key, Value, KeyHash1, KeyHash2, KeyEqual>::PrerequisitesProvider)`
+     * @tparam Compute               function or functor implementing `Value operator()(const Key&, CppMemo<Key, Value, KeyHash1, KeyHash2, KeyEqual>::PrerequisitesProvider)`
      *
      * @return the value corresponding to the requested key
      */

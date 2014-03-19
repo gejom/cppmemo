@@ -5,7 +5,7 @@
 
 using namespace cppmemo;
 
-void declarePrerequisites(int i, typename CppMemo<int, int>::PrerequisitesGatherer declare) {
+void declarePrerequisites(int i, CppMemo<int, int>::PrerequisitesGatherer declare) {
     if (i != 0) {
         // circular dependency (intentionally added)
         if (i == 8) declare(13);
@@ -13,7 +13,7 @@ void declarePrerequisites(int i, typename CppMemo<int, int>::PrerequisitesGather
     }
 }
 
-int calculate(int i, typename CppMemo<int, int>::PrerequisitesProvider prereqs) {
+int calculate(int i, CppMemo<int, int>::PrerequisitesProvider prereqs) {
     if (i == 0) return 0;
     else return 1 + prereqs(i-1);
 }
