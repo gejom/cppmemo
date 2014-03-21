@@ -55,6 +55,13 @@
 #ifndef CPPMEMO_H_
 #define CPPMEMO_H_
 
+// The noexcept specifier is unsupported in Visual Studio
+#ifndef _MSC_VER
+#define CPPMEMO_NOEXCEPT noexcept
+#else
+#define CPPMEMO_NOEXCEPT
+#endif
+
 #include <vector> // std::vector
 #include <unordered_set> // std::unordered_set
 #include <random> // std::minstd_rand
@@ -93,7 +100,7 @@ public:
     /**
      * @brief Returns a C string identifying the exception.
      */
-    const char* what() const noexcept {
+    const char* what() const CPPMEMO_NOEXCEPT {
         return "Circular dependency detected.";
     }
     
@@ -394,6 +401,13 @@ private:
 
     }
 
+    // This method serves as a workaround for a Visual Studio bug
+    template<typename Compute, typename DeclarePrerequisites>
+    static void runWrapper(CppMemo<Key, Value, KeyHash1, KeyHash2, KeyEqual>& instance, int threadNo, const Key& key, Compute compute,
+                    DeclarePrerequisites declarePrerequisites, bool providedDeclarePrerequisites) {
+        instance.run(threadNo, key, compute, declarePrerequisites, providedDeclarePrerequisites);
+    }
+
     template<typename Compute, typename DeclarePrerequisites>
     const Value& getValue(const Key& key, Compute compute, DeclarePrerequisites declarePrerequisites, int numThreads,
                           bool providedDeclarePrerequisites) {
@@ -409,13 +423,12 @@ private:
             threads.reserve(numThreads);
 
             for (int threadNo = 0; threadNo < numThreads; threadNo++) {
-
-                typedef CppMemo<Key, Value, KeyHash1, KeyHash2, KeyEqual> self;
-                std::thread thread(&self::run<Compute, DeclarePrerequisites>,
-                        this, threadNo, std::ref(key), compute, declarePrerequisites, providedDeclarePrerequisites);
+                
+                std::thread thread(&CppMemo<Key, Value, KeyHash1, KeyHash2, KeyEqual>::runWrapper<Compute, DeclarePrerequisites>,
+                        std::ref(*this), threadNo, std::cref(key), compute, declarePrerequisites, providedDeclarePrerequisites);
 
                 threads.push_back(std::move(thread));
-
+                
             }
 
             for (std::thread& thread : threads) {
@@ -627,5 +640,7 @@ public:
 };
 
 } // namespace cppmemo
+
+#undef CPPMEMO_NOEXCEPT
 
 #endif // CPPMEMO_H_

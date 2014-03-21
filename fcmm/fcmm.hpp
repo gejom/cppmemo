@@ -1,7 +1,7 @@
 /**
  * @file
  * @author  Giacomo Drago <giacomo@giacomodrago.com>
- * @version 1.0
+ * @version 1.0.1
  *
  *
  * @section LICENSE
@@ -45,10 +45,19 @@
 #ifndef FCMM_H_
 #define FCMM_H_
 
+// The noexcept specifier is unsupported in Visual Studio
+#ifndef _MSC_VER
+#define FCMM_NOEXCEPT noexcept
+#else
+#define FCMM_NOEXCEPT
+#endif
+
 #include <cstddef>
 #include <cstdint>
 #include <utility>
+#include <algorithm>
 #include <vector>
+#include <string>
 #include <memory>
 #include <functional>
 #include <type_traits>
@@ -335,7 +344,7 @@ private:
         /**
          * @brief Returns the capacity of this submap
          */
-        std::size_t getCapacity() const noexcept {
+        std::size_t getCapacity() const FCMM_NOEXCEPT {
             return buckets.size();
         }
 
@@ -360,14 +369,14 @@ private:
         /**
          * @brief Returns the number of entries in this submap
          */
-        std::size_t getNumValidBuckets() const noexcept {
+        std::size_t getNumValidBuckets() const FCMM_NOEXCEPT {
             return numValidBuckets.load(std::memory_order_relaxed);
         }
 
         /**
          * @brief Increments the number of valid buckets by 1
          */
-        void incrementNumValidBuckets() noexcept {
+        void incrementNumValidBuckets() FCMM_NOEXCEPT {
             numValidBuckets.fetch_add(1, std::memory_order_relaxed);
         }
 
@@ -375,7 +384,7 @@ private:
          * @brief Given the second hash of a key, calculates the corresponding
          * double hashing probe increment
          */
-        std::size_t calculateProbeIncrement(std::size_t hash2) const noexcept {
+        std::size_t calculateProbeIncrement(std::size_t hash2) const FCMM_NOEXCEPT {
             const std::size_t modulus = getCapacity() - 1;
             return 1 + hash2 % modulus; // in [1, capacity - 1]
         }
@@ -551,7 +560,7 @@ private:
         /**
          * @brief Returns `true` if the submap is overloaded
          */
-        bool isOverloaded() const noexcept {
+        bool isOverloaded() const FCMM_NOEXCEPT {
             return (float) getNumValidBuckets() / getCapacity() >= maxLoadFactor;
         }
 
@@ -602,7 +611,7 @@ private:
     /**
      * @brief Returns the maximum number of submaps
      */
-    std::size_t getMaxNumSubmaps() const noexcept {
+    std::size_t getMaxNumSubmaps() const FCMM_NOEXCEPT {
         return submaps.size();
     }
 
@@ -627,28 +636,28 @@ private:
     /**
      * @brief Returns the number of submaps
      */
-    std::size_t getNumSubmaps() const noexcept {
+    std::size_t getNumSubmaps() const FCMM_NOEXCEPT {
         return numSubmaps.load(std::memory_order_acquire);
     }
 
     /**
      * @brief Returns the index of the last submap
      */
-    std::size_t getLastSubmapIndex() const noexcept {
+    std::size_t getLastSubmapIndex() const FCMM_NOEXCEPT {
         return getNumSubmaps() - 1;
     }
 
     /**
      * @brief Increments the number of submaps by 1
      */
-    void incrementNumSubmaps() noexcept {
+    void incrementNumSubmaps() FCMM_NOEXCEPT {
         numSubmaps.fetch_add(1, std::memory_order_release);
     }
 
     /**
      * @brief Increments the number of entries by 1
      */
-    void incrementNumEntries() noexcept {
+    void incrementNumEntries() FCMM_NOEXCEPT {
         numEntries.fetch_add(1, std::memory_order_relaxed);
     }
 
@@ -788,8 +797,10 @@ public:
             maxLoadFactor(maxLoadFactor),
             numSubmaps(1),
             submaps(maxNumSubmaps),
-            numEntries(0),
-            expanding(ATOMIC_FLAG_INIT) {
+            numEntries(0) {
+
+        // Not using ATOMIC_FLAG_INIT to workaround a Visual Studio bug
+        expanding.clear();
 
         if (maxLoadFactor <= 0.0f || maxLoadFactor >= 1.0f) {
             throw std::logic_error("Invalid maximum load factor");
@@ -930,49 +941,49 @@ public:
     /**
      * @brief Returns the number of entries in the map
      */
-    std::size_t getNumEntries() const noexcept {
+    std::size_t getNumEntries() const FCMM_NOEXCEPT {
         return numEntries.load(std::memory_order_relaxed);
     }
 
     /**
      * @brief Alias for getNumEntries()
      */
-    std::size_t size() const noexcept {
+    std::size_t size() const FCMM_NOEXCEPT {
         return getNumEntries();
     }
 
     /**
      * @brief Returns `true` if the map has no elements, `false` otherwise
      */
-    bool empty() const noexcept {
+    bool empty() const FCMM_NOEXCEPT {
         return getNumEntries() == 0;
     }
 
     /**
      * @brief Returns a @link const_iterator @endlink pointing to the first entry
      */
-    const_iterator begin() const noexcept {
+    const_iterator begin() const FCMM_NOEXCEPT {
         return const_iterator(this);
     }
 
     /**
      * @brief Returns a @link const_iterator @endlink pointing to the first entry
      */
-    const_iterator cbegin() const noexcept {
+    const_iterator cbegin() const FCMM_NOEXCEPT {
         return begin();
     }
 
     /**
      * @brief Returns a @link const_iterator @endlink pointing to the past-the-end entry
      */
-    const_iterator end() const noexcept {
+    const_iterator end() const FCMM_NOEXCEPT {
         return const_iterator(this, true);
     }
 
     /**
      * @brief Returns a @link const_iterator @endlink pointing to the past-the-end entry
      */
-    const_iterator cend() const noexcept {
+    const_iterator cend() const FCMM_NOEXCEPT {
         return end();
     }
 
@@ -1223,5 +1234,7 @@ public:
 };
 
 } // namespace fcmm
+
+#undef FCMM_NOEXCEPT
 
 #endif // FCMM_H_
