@@ -1,12 +1,12 @@
 /**
  * @file
  * @author  Giacomo Drago <giacomo@giacomodrago.com>
- * @version 1.0
+ * @version 1.0.1
  *
  *
  * @section LICENSE
  *
- * Copyright (c) 2013, Giacomo Drago <giacomo@giacomodrago.com>
+ * Copyright (c) 2014, Giacomo Drago <giacomo@giacomodrago.com>
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -45,10 +45,19 @@
 #ifndef FCMM_H_
 #define FCMM_H_
 
+// The noexcept specifier is unsupported in Visual Studio
+#ifndef _MSC_VER
+#define FCMM_NOEXCEPT noexcept
+#else
+#define FCMM_NOEXCEPT
+#endif
+
 #include <cstddef>
 #include <cstdint>
 #include <utility>
+#include <algorithm>
 #include <vector>
+#include <string>
 #include <memory>
 #include <functional>
 #include <type_traits>
@@ -58,49 +67,54 @@
 
 namespace fcmm {
 
+namespace {
+
 /**
  * @brief Default maximum load factor
  */
-static const float DEFAULT_MAX_LOAD_FACTOR = 0.75f;
+const float DEFAULT_MAX_LOAD_FACTOR = 0.75f;
 
 /**
  * @brief Default maximum number of submaps
  */
-static const std::size_t DEFAULT_MAX_NUM_SUBMAPS = 128;
+const std::size_t DEFAULT_MAX_NUM_SUBMAPS = 128;
 
 /**
  * @brief The capacity of a new submap is calculated as the first prime number following the capacity of the
  * last submap multiplied by this constant
  */
-static const std::size_t NEW_SUBMAPS_CAPACITY_MULTIPLIER = 8;
+const std::size_t NEW_SUBMAPS_CAPACITY_MULTIPLIER = 8;
 
 /**
- * @brief Minimum capacity of the first submap
+ * @brief Minimum capacity of the first submap (it has to be a prime number greater than 2)
  */
-static const std::size_t FIRST_SUBMAP_MIN_CAPACITY = 65537;
+const std::size_t FIRST_SUBMAP_MIN_CAPACITY = 65537;
 
 /**
  * @brief The capacity of the first submap is calculated as:
  * <code>max(FIRST_SUBMAP_MIN_CAPACITY, nextPrime(<b>FIRST_SUBMAP_CAPACITY_MULTIPLIER</b> * estimatedNumEntries / maxLoadFactor))</code>
  */
-static const float FIRST_SUBMAP_CAPACITY_MULTIPLIER = 1.03f;
+const float FIRST_SUBMAP_CAPACITY_MULTIPLIER = 1.03f;
 
 /**
- * @brief Auxiliary function for nextPrime(). Returns `true` if `n` is prime, `false` otherwise.
- *
- * Adapted from http://stackoverflow.com/a/5694432/671092
+ * @brief Returns `true` if `n` is prime, `false` otherwise.
  */
 template<typename T>
-static bool isPrime(const T& n, typename std::enable_if<std::is_integral<T>::value>::type* = nullptr) {
+bool isPrime(const T& n, typename std::enable_if<std::is_integral<T>::value>::type* = nullptr) {
 
-    std::size_t divisor = 3;
-    while (1) {
-        const std::size_t quotient = n / divisor;
-        if (quotient < divisor)
-            return true;
-        if (n == quotient * divisor)
+    if (n < 2)
+        return false;
+    if (n == 2)
+        return true;
+    if (n % 2 == 0)
+        return false;
+
+    T div = 3;
+
+    while (div * div <= n) {
+        if (n % div == 0)
             return false;
-        divisor += 2;
+        div += 2;
     }
 
     return true;
@@ -108,12 +122,10 @@ static bool isPrime(const T& n, typename std::enable_if<std::is_integral<T>::val
 }
 
 /**
- * @brief Returns the smallest prime number greater than `n`
- *
- * Adapted from http://stackoverflow.com/a/5694432/671092
+ * @brief Returns the smallest prime number greater than or equal to `n`
  */
 template<typename T>
-static T nextPrime(T n, typename std::enable_if<std::is_integral<T>::value>::type* = nullptr) {
+T nextPrime(T n, typename std::enable_if<std::is_integral<T>::value>::type* = nullptr) {
 
     if (n <= 2)
         return 2;
@@ -128,6 +140,8 @@ static T nextPrime(T n, typename std::enable_if<std::is_integral<T>::value>::typ
     return n;
 
 }
+
+} // unnamed namespace
 
 /**
  * @brief This struct holds the statistics about a single submap of a @link Fcmm @endlink instance
@@ -335,7 +349,7 @@ private:
         /**
          * @brief Returns the capacity of this submap
          */
-        std::size_t getCapacity() const noexcept {
+        std::size_t getCapacity() const FCMM_NOEXCEPT {
             return buckets.size();
         }
 
@@ -360,14 +374,14 @@ private:
         /**
          * @brief Returns the number of entries in this submap
          */
-        std::size_t getNumValidBuckets() const noexcept {
+        std::size_t getNumValidBuckets() const FCMM_NOEXCEPT {
             return numValidBuckets.load(std::memory_order_relaxed);
         }
 
         /**
          * @brief Increments the number of valid buckets by 1
          */
-        void incrementNumValidBuckets() noexcept {
+        void incrementNumValidBuckets() FCMM_NOEXCEPT {
             numValidBuckets.fetch_add(1, std::memory_order_relaxed);
         }
 
@@ -375,7 +389,7 @@ private:
          * @brief Given the second hash of a key, calculates the corresponding
          * double hashing probe increment
          */
-        std::size_t calculateProbeIncrement(std::size_t hash2) const noexcept {
+        std::size_t calculateProbeIncrement(std::size_t hash2) const FCMM_NOEXCEPT {
             const std::size_t modulus = getCapacity() - 1;
             return 1 + hash2 % modulus; // in [1, capacity - 1]
         }
@@ -485,7 +499,7 @@ private:
         template<typename KeyType, typename ComputeValueFunction>
         std::pair<std::size_t, bool> insert(KeyType&& key, std::size_t hash1, std::size_t hash2, ComputeValueFunction computeValue) {
 
-            Value value = Value(); // to avoid "maybe-uninitialized" warnings
+            Value value = Value();
             bool valueComputed = false;
 
             const std::size_t startIndex = hash1 % getCapacity(); // initial position for probing
@@ -551,7 +565,7 @@ private:
         /**
          * @brief Returns `true` if the submap is overloaded
          */
-        bool isOverloaded() const noexcept {
+        bool isOverloaded() const FCMM_NOEXCEPT {
             return (float) getNumValidBuckets() / getCapacity() >= maxLoadFactor;
         }
 
@@ -602,7 +616,7 @@ private:
     /**
      * @brief Returns the maximum number of submaps
      */
-    std::size_t getMaxNumSubmaps() const noexcept {
+    std::size_t getMaxNumSubmaps() const FCMM_NOEXCEPT {
         return submaps.size();
     }
 
@@ -627,28 +641,28 @@ private:
     /**
      * @brief Returns the number of submaps
      */
-    std::size_t getNumSubmaps() const noexcept {
+    std::size_t getNumSubmaps() const FCMM_NOEXCEPT {
         return numSubmaps.load(std::memory_order_acquire);
     }
 
     /**
      * @brief Returns the index of the last submap
      */
-    std::size_t getLastSubmapIndex() const noexcept {
+    std::size_t getLastSubmapIndex() const FCMM_NOEXCEPT {
         return getNumSubmaps() - 1;
     }
 
     /**
      * @brief Increments the number of submaps by 1
      */
-    void incrementNumSubmaps() noexcept {
+    void incrementNumSubmaps() FCMM_NOEXCEPT {
         numSubmaps.fetch_add(1, std::memory_order_release);
     }
 
     /**
      * @brief Increments the number of entries by 1
      */
-    void incrementNumEntries() noexcept {
+    void incrementNumEntries() FCMM_NOEXCEPT {
         numEntries.fetch_add(1, std::memory_order_relaxed);
     }
 
@@ -788,8 +802,10 @@ public:
             maxLoadFactor(maxLoadFactor),
             numSubmaps(1),
             submaps(maxNumSubmaps),
-            numEntries(0),
-            expanding(ATOMIC_FLAG_INIT) {
+            numEntries(0) {
+
+        // Not using ATOMIC_FLAG_INIT to workaround a Visual Studio bug
+        expanding.clear();
 
         if (maxLoadFactor <= 0.0f || maxLoadFactor >= 1.0f) {
             throw std::logic_error("Invalid maximum load factor");
@@ -880,7 +896,7 @@ public:
      */
     template<typename ComputeValueFunction>
     std::pair<const_iterator, bool> insert(Key&& key, ComputeValueFunction computeValue) {
-        return insertHelper(key, keyHash1(key), keyHash2(key), computeValue);
+        return insertHelper(std::move(key), keyHash1(key), keyHash2(key), computeValue);
     }
 
     /**
@@ -912,7 +928,7 @@ public:
     }
 
     /**
-     * @brief Inserts a new entry in the map. The new entry is constructed in place using `args` as the arguments
+     * @brief Inserts a new entry into the map. The new entry is constructed using `args` as the arguments
      * for the entry's constructor.
      *
      * @param args  arguments used to construct a new entry (key, value)
@@ -930,49 +946,49 @@ public:
     /**
      * @brief Returns the number of entries in the map
      */
-    std::size_t getNumEntries() const noexcept {
+    std::size_t getNumEntries() const FCMM_NOEXCEPT {
         return numEntries.load(std::memory_order_relaxed);
     }
 
     /**
      * @brief Alias for getNumEntries()
      */
-    std::size_t size() const noexcept {
+    std::size_t size() const FCMM_NOEXCEPT {
         return getNumEntries();
     }
 
     /**
      * @brief Returns `true` if the map has no elements, `false` otherwise
      */
-    bool empty() const noexcept {
+    bool empty() const FCMM_NOEXCEPT {
         return getNumEntries() == 0;
     }
 
     /**
      * @brief Returns a @link const_iterator @endlink pointing to the first entry
      */
-    const_iterator begin() const noexcept {
+    const_iterator begin() const FCMM_NOEXCEPT {
         return const_iterator(this);
     }
 
     /**
      * @brief Returns a @link const_iterator @endlink pointing to the first entry
      */
-    const_iterator cbegin() const noexcept {
+    const_iterator cbegin() const FCMM_NOEXCEPT {
         return begin();
     }
 
     /**
      * @brief Returns a @link const_iterator @endlink pointing to the past-the-end entry
      */
-    const_iterator end() const noexcept {
+    const_iterator end() const FCMM_NOEXCEPT {
         return const_iterator(this, true);
     }
 
     /**
      * @brief Returns a @link const_iterator @endlink pointing to the past-the-end entry
      */
-    const_iterator cend() const noexcept {
+    const_iterator cend() const FCMM_NOEXCEPT {
         return end();
     }
 
@@ -1153,6 +1169,12 @@ public:
     public:
 
         /**
+         * @brief Default constructor. The resulting iterator is invalid and should not be used.
+         */
+        const_iterator() : map(NULL), submapIndex(0), bucketIndex(0), end(true) {
+        }
+
+        /**
          * @brief Equality operator
          */
         bool operator==(const const_iterator& other) const {
@@ -1198,16 +1220,6 @@ public:
             return &getEntry();
         }
 
-        /**
-         * @brief Swap function
-         */
-        friend void swap(const_iterator& it1, const_iterator& it2) {
-            std::swap(it1.map, it2.map);
-            std::swap(it1.submapIndex, it2.submapIndex);
-            std::swap(it1.bucketIndex, it2.bucketIndex);
-            std::swap(it1.end, it2.end);
-        }
-
     };
 
     /**
@@ -1223,5 +1235,7 @@ public:
 };
 
 } // namespace fcmm
+
+#undef FCMM_NOEXCEPT
 
 #endif // FCMM_H_
